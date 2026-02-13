@@ -1,0 +1,435 @@
+using GatherWin.Models;
+
+namespace GatherWin.Services;
+
+/// <summary>
+/// Background polling service that monitors Gather for new activity.
+/// Raises events instead of console output — ViewModels subscribe and update the UI.
+/// </summary>
+public class PollingService
+{
+    private readonly GatherApiClient _api;
+    private readonly string _agentId;
+
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+    private Task? _pollingTask;
+    private TimeSpan _pollInterval;
+    private string[] _watchedPostIds;
+
+    // State tracking (same as GatherPing's MonitorService)
+    private readonly Dictionary<string, HashSet<string>> _seenCommentIds = new();
+    private readonly HashSet<string> _seenInboxMessageIds = new();
+    private readonly HashSet<string> _seenFeedPostIds = new();
+    private readonly Dictionary<string, HashSet<string>> _seenChannelMessageIds = new();
+    private readonly Dictionary<string, string> _channelNames = new();
+    private DateTimeOffset _feedSinceTimestamp;
+    private DateTimeOffset _channelSinceTimestamp;
+    private bool _isFirstRun = true;
+
+    // Events
+    public event EventHandler<CommentEventArgs>? NewCommentReceived;
+    public event EventHandler<InboxMessageEventArgs>? NewInboxMessageReceived;
+    public event EventHandler<FeedPostEventArgs>? NewFeedPostReceived;
+    public event EventHandler<ChannelMessageEventArgs>? NewChannelMessageReceived;
+    public event EventHandler<InitialStateEventArgs>? InitialStateLoaded;
+    public event EventHandler<DateTimeOffset>? PollCycleCompleted;
+    public event EventHandler<string>? PollError;
+
+    public bool IsRunning => _pollingTask is not null && !_pollingTask.IsCompleted;
+
+    public PollingService(GatherApiClient api, string agentId, string[] watchedPostIds, int intervalSeconds)
+    {
+        _api = api;
+        _agentId = agentId;
+        _watchedPostIds = watchedPostIds;
+        _pollInterval = TimeSpan.FromSeconds(intervalSeconds);
+        _feedSinceTimestamp = DateTimeOffset.UtcNow.AddDays(-7);
+        _channelSinceTimestamp = DateTimeOffset.UtcNow.AddDays(-7);
+    }
+
+    public void UpdateSettings(string[] watchedPostIds, int intervalSeconds)
+    {
+        _watchedPostIds = watchedPostIds;
+        _pollInterval = TimeSpan.FromSeconds(intervalSeconds);
+    }
+
+    public async Task StartAsync(CancellationToken externalCt)
+    {
+        AppLogger.Log("Poll", $"Starting polling (interval={_pollInterval.TotalSeconds}s, posts={string.Join(",", _watchedPostIds)})");
+
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(externalCt);
+        _timer = new PeriodicTimer(_pollInterval);
+
+        // Do initial poll immediately
+        AppLogger.Log("Poll", "Running initial poll...");
+        await PollOnceAsync(_cts.Token);
+
+        // Start background polling
+        AppLogger.Log("Poll", "Initial poll complete, starting background loop");
+        _pollingTask = PollLoopAsync(_cts.Token);
+    }
+
+    public void Stop()
+    {
+        AppLogger.Log("Poll", "Stopping polling service");
+        _cts?.Cancel();
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private async Task PollLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(ct))
+            {
+                try
+                {
+                    await PollOnceAsync(ct);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    AppLogger.LogError("Poll: cycle failed", ex);
+                    PollError?.Invoke(this, ex.Message);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Clean shutdown
+        }
+    }
+
+    private async Task PollOnceAsync(CancellationToken ct)
+    {
+        AppLogger.Log("Poll", _isFirstRun ? "First poll: seeding state..." : "Poll cycle starting...");
+
+        await CheckPostCommentsAsync(ct);
+        await CheckInboxAsync(ct);
+        await CheckFeedAsync(ct);
+        await CheckChannelsAsync(ct);
+
+        if (_isFirstRun)
+        {
+            _isFirstRun = false;
+            AppLogger.Log("Poll", "Initial state seeded");
+            InitialStateLoaded?.Invoke(this, new InitialStateEventArgs());
+        }
+
+        AppLogger.Log("Poll", "Poll cycle completed");
+        PollCycleCompleted?.Invoke(this, DateTimeOffset.Now);
+    }
+
+    // ── Comment Monitoring ──────────────────────────────────────
+
+    private async Task CheckPostCommentsAsync(CancellationToken ct)
+    {
+        foreach (var postId in _watchedPostIds)
+        {
+            var post = await _api.GetPostWithCommentsAsync(postId, ct);
+            if (post is null) continue;
+
+            if (!_seenCommentIds.TryGetValue(postId, out var seenIds))
+            {
+                seenIds = new HashSet<string>();
+                _seenCommentIds[postId] = seenIds;
+            }
+
+            var comments = post.Comments ?? [];
+
+            if (_isFirstRun)
+            {
+                // Seed IDs and populate UI with existing comments
+                AppLogger.Log("Poll", $"Seeding {comments.Count} comments from \"{post.Title}\"");
+                foreach (var c in comments)
+                {
+                    if (c.Id is not null) seenIds.Add(c.Id);
+
+                    NewCommentReceived?.Invoke(this, new CommentEventArgs
+                    {
+                        PostId = postId,
+                        PostTitle = post.Title ?? postId,
+                        CommentId = c.Id ?? "",
+                        Author = c.Author ?? "unknown",
+                        Body = c.Body ?? "(empty)",
+                        Timestamp = ParseTimestamp(c.Created),
+                        IsInitialLoad = true
+                    });
+                }
+                continue;
+            }
+
+            foreach (var comment in comments)
+            {
+                if (comment.Id is null) continue;
+                if (!seenIds.Add(comment.Id)) continue;
+                if (comment.AuthorId == _agentId) continue;
+
+                AppLogger.Log("Poll", $"New comment on \"{post.Title}\" by {comment.Author}: {(comment.Body ?? "")[..Math.Min(50, (comment.Body ?? "").Length)]}...");
+                NewCommentReceived?.Invoke(this, new CommentEventArgs
+                {
+                    PostId = postId,
+                    PostTitle = post.Title ?? postId,
+                    CommentId = comment.Id,
+                    Author = comment.Author ?? "unknown",
+                    Body = comment.Body ?? "(empty)",
+                    Timestamp = ParseTimestamp(comment.Created)
+                });
+            }
+        }
+    }
+
+    // ── Inbox Monitoring ────────────────────────────────────────
+
+    private async Task CheckInboxAsync(CancellationToken ct)
+    {
+        var inbox = await _api.GetInboxAsync(ct);
+        if (inbox is null) return;
+
+        var messages = inbox.Messages ?? [];
+
+        if (_isFirstRun)
+        {
+            AppLogger.Log("Poll", $"Seeding {messages.Count} inbox messages");
+            foreach (var m in messages)
+            {
+                if (m.Id is not null) _seenInboxMessageIds.Add(m.Id);
+
+                NewInboxMessageReceived?.Invoke(this, new InboxMessageEventArgs
+                {
+                    MessageId = m.Id ?? "",
+                    Subject = m.Subject ?? m.Type ?? "message",
+                    Body = m.Body ?? "(empty)",
+                    Timestamp = ParseTimestamp(m.Created),
+                    IsInitialLoad = true,
+                    PostId = m.PostId,
+                    CommentId = m.CommentId,
+                    ChannelId = m.ChannelId
+                });
+            }
+            return;
+        }
+
+        foreach (var message in messages)
+        {
+            if (message.Id is null) continue;
+            if (!_seenInboxMessageIds.Add(message.Id)) continue;
+
+            AppLogger.Log("Poll", $"New inbox message: {message.Subject ?? message.Type ?? "message"}");
+            NewInboxMessageReceived?.Invoke(this, new InboxMessageEventArgs
+            {
+                MessageId = message.Id,
+                Subject = message.Subject ?? message.Type ?? "message",
+                Body = message.Body ?? "(empty)",
+                Timestamp = ParseTimestamp(message.Created),
+                PostId = message.PostId,
+                CommentId = message.CommentId,
+                ChannelId = message.ChannelId
+            });
+        }
+    }
+
+    // ── Feed Monitoring ─────────────────────────────────────────
+
+    private async Task CheckFeedAsync(CancellationToken ct)
+    {
+        var feed = await _api.GetFeedPostsAsync(_feedSinceTimestamp, ct);
+        if (feed is null) return;
+
+        var posts = feed.Posts ?? [];
+
+        if (_isFirstRun)
+        {
+            AppLogger.Log("Poll", $"Seeding {posts.Count} feed posts");
+            foreach (var p in posts)
+            {
+                if (p.Id is not null) _seenFeedPostIds.Add(p.Id);
+
+                NewFeedPostReceived?.Invoke(this, new FeedPostEventArgs
+                {
+                    PostId = p.Id ?? "",
+                    Author = p.Author ?? "unknown",
+                    Title = p.Title ?? p.Summary ?? "(no title)",
+                    Body = p.Body ?? p.Summary ?? "",
+                    Timestamp = ParseTimestamp(p.Created),
+                    IsInitialLoad = true
+                });
+            }
+            _feedSinceTimestamp = DateTimeOffset.UtcNow;
+            return;
+        }
+
+        foreach (var post in posts)
+        {
+            if (post.Id is null) continue;
+            if (!_seenFeedPostIds.Add(post.Id)) continue;
+            if (post.AuthorId == _agentId) continue;
+
+            AppLogger.Log("Poll", $"New feed post by {post.Author}: {post.Title ?? post.Summary ?? "(no title)"}");
+            NewFeedPostReceived?.Invoke(this, new FeedPostEventArgs
+            {
+                PostId = post.Id,
+                Author = post.Author ?? "unknown",
+                Title = post.Title ?? post.Summary ?? "(no title)",
+                Body = post.Body ?? post.Summary ?? "",
+                Timestamp = ParseTimestamp(post.Created)
+            });
+        }
+
+        if (_seenFeedPostIds.Count > 10000)
+        {
+            _seenFeedPostIds.Clear();
+            foreach (var p in posts)
+                if (p.Id is not null) _seenFeedPostIds.Add(p.Id);
+        }
+
+        _feedSinceTimestamp = DateTimeOffset.UtcNow;
+    }
+
+    // ── Channel Monitoring ──────────────────────────────────────
+
+    private async Task CheckChannelsAsync(CancellationToken ct)
+    {
+        var channelList = await _api.GetChannelsAsync(ct);
+        if (channelList is null) return;
+
+        var channels = channelList.Channels ?? [];
+
+        foreach (var channel in channels)
+        {
+            if (channel.Id is null) continue;
+
+            if (channel.Name is not null)
+                _channelNames[channel.Id] = channel.Name;
+
+            var channelName = _channelNames.GetValueOrDefault(channel.Id, channel.Id);
+
+            if (!_seenChannelMessageIds.TryGetValue(channel.Id, out var seenIds))
+            {
+                seenIds = new HashSet<string>();
+                _seenChannelMessageIds[channel.Id] = seenIds;
+            }
+
+            var msgResp = await _api.GetChannelMessagesAsync(channel.Id, _channelSinceTimestamp, ct);
+            if (msgResp is null) continue;
+
+            var messages = msgResp.Messages ?? [];
+
+            if (_isFirstRun)
+            {
+                AppLogger.Log("Poll", $"Seeding {messages.Count} messages from #{channelName}");
+                foreach (var m in messages)
+                {
+                    if (m.Id is not null) seenIds.Add(m.Id);
+
+                    NewChannelMessageReceived?.Invoke(this, new ChannelMessageEventArgs
+                    {
+                        ChannelId = channel.Id,
+                        ChannelName = channelName,
+                        MessageId = m.Id ?? "",
+                        Author = m.AuthorName ?? m.AuthorId ?? "unknown",
+                        Body = m.Body ?? "(empty)",
+                        Timestamp = ParseTimestamp(m.Created),
+                        IsInitialLoad = true
+                    });
+                }
+                continue;
+            }
+
+            foreach (var msg in messages)
+            {
+                if (msg.Id is null) continue;
+                if (!seenIds.Add(msg.Id)) continue;
+                if (msg.AuthorId == _agentId) continue;
+
+                AppLogger.Log("Poll", $"New channel msg in #{channelName} by {msg.AuthorName ?? msg.AuthorId}: {(msg.Body ?? "")[..Math.Min(50, (msg.Body ?? "").Length)]}...");
+                NewChannelMessageReceived?.Invoke(this, new ChannelMessageEventArgs
+                {
+                    ChannelId = channel.Id,
+                    ChannelName = channelName,
+                    MessageId = msg.Id,
+                    Author = msg.AuthorName ?? msg.AuthorId ?? "unknown",
+                    Body = msg.Body ?? "(empty)",
+                    Timestamp = ParseTimestamp(msg.Created)
+                });
+            }
+
+            if (seenIds.Count > 5000)
+            {
+                seenIds.Clear();
+                foreach (var m in messages)
+                    if (m.Id is not null) seenIds.Add(m.Id);
+            }
+        }
+
+        _channelSinceTimestamp = DateTimeOffset.UtcNow;
+    }
+
+    private static DateTimeOffset ParseTimestamp(string? ts)
+    {
+        if (ts is not null && DateTimeOffset.TryParse(ts, out var dto))
+            return dto;
+        return DateTimeOffset.UtcNow;
+    }
+}
+
+// ── Event Args ──────────────────────────────────────────────────
+
+public class CommentEventArgs : EventArgs
+{
+    public required string PostId { get; init; }
+    public required string PostTitle { get; init; }
+    public required string CommentId { get; init; }
+    public required string Author { get; init; }
+    public required string Body { get; init; }
+    public required DateTimeOffset Timestamp { get; init; }
+    public bool IsInitialLoad { get; init; }
+}
+
+public class InboxMessageEventArgs : EventArgs
+{
+    public required string MessageId { get; init; }
+    public required string Subject { get; init; }
+    public required string Body { get; init; }
+    public required DateTimeOffset Timestamp { get; init; }
+    public bool IsInitialLoad { get; init; }
+
+    /// <summary>Post ID this notification references (if applicable).</summary>
+    public string? PostId { get; init; }
+    /// <summary>Comment ID this notification references (if applicable).</summary>
+    public string? CommentId { get; init; }
+    /// <summary>Channel ID this notification references (if applicable).</summary>
+    public string? ChannelId { get; init; }
+}
+
+public class FeedPostEventArgs : EventArgs
+{
+    public required string PostId { get; init; }
+    public required string Author { get; init; }
+    public required string Title { get; init; }
+    public required string Body { get; init; }
+    public required DateTimeOffset Timestamp { get; init; }
+    public bool IsInitialLoad { get; init; }
+}
+
+public class ChannelMessageEventArgs : EventArgs
+{
+    public required string ChannelId { get; init; }
+    public required string ChannelName { get; init; }
+    public required string MessageId { get; init; }
+    public required string Author { get; init; }
+    public required string Body { get; init; }
+    public required DateTimeOffset Timestamp { get; init; }
+    public bool IsInitialLoad { get; init; }
+}
+
+public class InitialStateEventArgs : EventArgs
+{
+    public string? PostTitle { get; init; }
+    public string? PostId { get; init; }
+    public int CommentCount { get; init; }
+    public int Score { get; init; }
+    public bool Verified { get; init; }
+}

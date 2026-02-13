@@ -1,0 +1,59 @@
+# ═══ .NET / Visual Studio ═══
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+binTempBuild/
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# User-specific config overrides (keep the base appsettings.json as a template)
+appsettings.Development.json
+appsettings.Local.json
+appsettings.Production.json
+
+# Gather keys and auth (stored in ~/.gather, never in repo)
+private.key
+public.pem
+auth.json
+registration.json
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Windows Installer files
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
