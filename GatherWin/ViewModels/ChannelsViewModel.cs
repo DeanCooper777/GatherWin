@@ -235,6 +235,7 @@ public partial class ChannelsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("Channels: send message failed", ex);
             SendError = ex.Message;
         }
         finally
@@ -312,6 +313,7 @@ public partial class ChannelsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("Channels: create channel failed", ex);
             CreateError = ex.Message;
         }
         finally

@@ -151,6 +151,7 @@ public partial class FeedViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("Feed: create post failed", ex);
             PostError = ex.Message;
         }
         finally
@@ -218,6 +219,7 @@ public partial class FeedViewModel : ObservableObject
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
+            AppLogger.LogError("Feed: load discussion failed", ex);
             DiscussionBody = $"Error: {ex.Message}";
         }
         finally
@@ -333,6 +335,7 @@ public partial class FeedViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("Feed: send reply failed", ex);
             DiscussionSendError = ex.Message;
         }
         finally

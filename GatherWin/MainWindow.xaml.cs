@@ -15,6 +15,8 @@ namespace GatherWin;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
+    private readonly System.ComponentModel.PropertyChangedEventHandler _onPropertyChanged;
+    private readonly EventHandler _onNewActivity;
 
     public MainWindow(MainViewModel viewModel)
     {
@@ -27,7 +29,7 @@ public partial class MainWindow : Window
             IsCurrentUserToVisibilityConverter.CurrentUserName = viewModel.CurrentAgentName;
 
         // Update converter when agent name is fetched after connect
-        viewModel.PropertyChanged += (_, args) =>
+        _onPropertyChanged = (_, args) =>
         {
             if (args.PropertyName == nameof(MainViewModel.CurrentAgentName) &&
                 !string.IsNullOrEmpty(viewModel.CurrentAgentName))
@@ -35,15 +37,22 @@ public partial class MainWindow : Window
                 IsCurrentUserToVisibilityConverter.CurrentUserName = viewModel.CurrentAgentName;
             }
         };
+        viewModel.PropertyChanged += _onPropertyChanged;
 
         // Flash taskbar when new activity arrives and window is not focused
-        viewModel.NewActivityArrived += (_, _) =>
+        _onNewActivity = (_, _) =>
         {
             if (!IsActive)
                 FlashWindow();
         };
+        viewModel.NewActivityArrived += _onNewActivity;
 
-        Closing += (_, _) => viewModel.Shutdown();
+        Closing += (_, _) =>
+        {
+            viewModel.PropertyChanged -= _onPropertyChanged;
+            viewModel.NewActivityArrived -= _onNewActivity;
+            viewModel.Shutdown();
+        };
     }
 
     // ── Card expand/collapse on click ───────────────────────────
@@ -350,7 +359,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var claude = new ClaudeApiClient(_viewModel.ClaudeApiKey);
+        using var claude = new ClaudeApiClient(_viewModel.ClaudeApiKey);
         var dialog = new AiAssistWindow(claude, originalText, context) { Owner = this };
         if (dialog.ShowDialog() == true)
         {
@@ -435,9 +444,9 @@ public partial class MainWindow : Window
             };
             FlashWindowEx(ref info);
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore flash failures
+            AppLogger.LogError("UI: FlashWindow failed", ex);
         }
     }
 }

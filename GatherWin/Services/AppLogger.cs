@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 
 namespace GatherWin.Services;
@@ -11,12 +12,17 @@ public static class AppLogger
         AppDomain.CurrentDomain.BaseDirectory, "GatherWin.log");
 
     private static readonly object Lock = new();
+    private static bool _logBroken;
 
     static AppLogger()
     {
         // Start fresh each run
         try { File.WriteAllText(LogPath, $"=== GatherWin started at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n"); }
-        catch { /* ignore */ }
+        catch (Exception ex)
+        {
+            _logBroken = true;
+            Debug.WriteLine($"AppLogger: Failed to initialize log file: {ex.Message}");
+        }
     }
 
     public static void Log(string message)
@@ -24,8 +30,18 @@ public static class AppLogger
         var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
         lock (Lock)
         {
+            if (_logBroken)
+            {
+                Debug.WriteLine(line);
+                return;
+            }
             try { File.AppendAllText(LogPath, line + "\n"); }
-            catch { /* ignore */ }
+            catch (Exception ex)
+            {
+                _logBroken = true;
+                Debug.WriteLine($"AppLogger: Log write failed ({ex.Message}), falling back to Debug output");
+                Debug.WriteLine(line);
+            }
         }
     }
 
@@ -39,8 +55,18 @@ public static class AppLogger
             : $"[{DateTime.Now:HH:mm:ss.fff}] ERROR: {message}";
         lock (Lock)
         {
+            if (_logBroken)
+            {
+                Debug.WriteLine(line);
+                return;
+            }
             try { File.AppendAllText(LogPath, line + "\n"); }
-            catch { /* ignore */ }
+            catch (Exception writeEx)
+            {
+                _logBroken = true;
+                Debug.WriteLine($"AppLogger: Log write failed ({writeEx.Message}), falling back to Debug output");
+                Debug.WriteLine(line);
+            }
         }
     }
 }

@@ -74,6 +74,8 @@ public class PollingService
     {
         AppLogger.Log("Poll", "Stopping polling service");
         _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
         _timer?.Dispose();
         _timer = null;
     }

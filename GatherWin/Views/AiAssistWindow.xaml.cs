@@ -3,6 +3,7 @@ using GatherWin.Services;
 
 namespace GatherWin.Views;
 
+
 public partial class AiAssistWindow : Window
 {
     private readonly ClaudeApiClient _claude;
@@ -51,6 +52,7 @@ public partial class AiAssistWindow : Window
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("AiAssist: generation failed", ex);
             StatusText.Text = $"Error: {ex.Message}";
         }
         finally

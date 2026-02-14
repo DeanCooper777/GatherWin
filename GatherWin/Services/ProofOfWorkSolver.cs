@@ -26,7 +26,7 @@ public static class ProofOfWorkSolver
         throw new InvalidOperationException("Failed to solve proof-of-work challenge");
     }
 
-    private static bool HasLeadingZeroBits(byte[] hash, int requiredBits)
+    internal static bool HasLeadingZeroBits(byte[] hash, int requiredBits)
     {
         var fullBytes = requiredBits / 8;
         var remainingBits = requiredBits % 8;

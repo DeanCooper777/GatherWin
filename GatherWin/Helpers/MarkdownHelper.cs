@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Windows;
+using GatherWin.Services;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
@@ -180,9 +181,9 @@ public static class MarkdownHelper
                     hyperlink.RequestNavigate += Hyperlink_RequestNavigate;
                     inlines.Add(hyperlink);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Invalid URI — show as plain text
+                    AppLogger.Log("Markdown", $"Invalid URI: {match.Groups[13].Value} — {ex.Message}");
                     inlines.Add(new Run(match.Value));
                 }
             }
@@ -205,7 +206,7 @@ public static class MarkdownHelper
                 UseShellExecute = true
             });
         }
-        catch { /* ignore launch failures */ }
+        catch (Exception ex) { AppLogger.LogError("Markdown: failed to open URL", ex); }
         e.Handled = true;
     }
 }

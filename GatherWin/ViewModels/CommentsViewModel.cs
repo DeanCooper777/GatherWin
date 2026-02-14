@@ -134,6 +134,7 @@ public partial class CommentsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("Comments: send reply failed", ex);
             SendError = ex.Message;
         }
         finally
@@ -203,6 +204,7 @@ public partial class CommentsViewModel : ObservableObject
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
+            AppLogger.LogError("Comments: load discussion failed", ex);
             DiscussionBody = $"Error: {ex.Message}";
         }
         finally
@@ -319,6 +321,7 @@ public partial class CommentsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("Comments: send discussion reply failed", ex);
             DiscussionSendError = ex.Message;
         }
         finally

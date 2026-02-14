@@ -9,7 +9,7 @@ namespace GatherWin.Services;
 /// Client for the Anthropic Claude Messages API.
 /// Used for AI writing assistance.
 /// </summary>
-public class ClaudeApiClient
+public class ClaudeApiClient : IDisposable
 {
     private const string ApiUrl = "https://api.anthropic.com/v1/messages";
     private readonly string _apiKey;
@@ -87,5 +87,10 @@ public class ClaudeApiClient
             AppLogger.LogError("Claude API call failed", ex);
             return (false, $"Error: {ex.Message}");
         }
+    }
+
+    public void Dispose()
+    {
+        _http.Dispose();
     }
 }

@@ -307,8 +307,9 @@ public class GatherApiClient
                     var post = JsonSerializer.Deserialize<GatherPost>(responseBody, _jsonOpts);
                     return (true, post?.Id, null);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    AppLogger.LogError("API: response parse failed for CreatePost", ex);
                     return (true, null, null); // Created but couldn't parse response
                 }
             }
@@ -342,8 +343,9 @@ public class GatherApiClient
                 var channel = JsonSerializer.Deserialize<ChannelItem>(body, _jsonOpts);
                 return (true, channel?.Id, null);
             }
-            catch
+            catch (Exception ex)
             {
+                AppLogger.LogError("API: response parse failed for CreateChannel", ex);
                 return (true, null, null); // Created but couldn't parse response
             }
         }

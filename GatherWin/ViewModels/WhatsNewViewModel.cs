@@ -499,6 +499,7 @@ public partial class WhatsNewViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLogger.LogError("WhatsNew: send reply failed", ex);
             SendError = ex.Message;
         }
         finally

@@ -26,6 +26,16 @@ public partial class MainViewModel : ObservableObject
     // Badge expiry timer
     private readonly DispatcherTimer _badgeExpiryTimer;
 
+    // Stored event handlers for cleanup
+    private EventHandler<CommentEventArgs>? _onComment;
+    private EventHandler<InboxMessageEventArgs>? _onInbox;
+    private EventHandler<FeedPostEventArgs>? _onFeed;
+    private EventHandler<ChannelMessageEventArgs>? _onChannel;
+    private EventHandler<DateTimeOffset>? _onPollCycle;
+    private EventHandler<string>? _onPollError;
+    private EventHandler<InitialStateEventArgs>? _onInitialState;
+    private readonly EventHandler<DateTimeOffset> _onTokenRefreshed;
+
     // Agent identity cache (Feature 10)
     [ObservableProperty] private string _currentAgentName = string.Empty;
     [ObservableProperty] private string _currentAgentDescription = string.Empty;
@@ -101,7 +111,7 @@ public partial class MainViewModel : ObservableObject
         _badgeExpiryTimer.Start();
 
         // Watch for token refreshes
-        _auth.TokenRefreshed += (_, expiry) =>
+        _onTokenRefreshed = (_, expiry) =>
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
@@ -109,6 +119,7 @@ public partial class MainViewModel : ObservableObject
                 TokenExpiryDisplay = $"Token valid until {expiry.ToLocalTime():HH:mm:ss}";
             });
         };
+        _auth.TokenRefreshed += _onTokenRefreshed;
     }
 
     partial void OnSelectedTabIndexChanged(int value)
@@ -267,6 +278,7 @@ public partial class MainViewModel : ObservableObject
     private void Disconnect()
     {
         AppLogger.Log("VM", "Disconnecting...");
+        UnwirePollingEvents();
         _polling?.Stop();
         _pollCts?.Cancel();
         _pollCts?.Dispose();
@@ -281,7 +293,9 @@ public partial class MainViewModel : ObservableObject
 
     public void Shutdown()
     {
+        _badgeExpiryTimer.Tick -= BadgeExpiryTimer_Tick;
         _badgeExpiryTimer.Stop();
+        _auth.TokenRefreshed -= _onTokenRefreshed;
         Disconnect();
     }
 
@@ -327,7 +341,7 @@ public partial class MainViewModel : ObservableObject
 
     private void WirePollingEvents(PollingService polling)
     {
-        polling.NewCommentReceived += (_, e) =>
+        _onComment = (_, e) =>
         {
             var isNew = !e.IsInitialLoad;
             var now = DateTimeOffset.Now;
@@ -363,7 +377,7 @@ public partial class MainViewModel : ObservableObject
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
 
-        polling.NewInboxMessageReceived += (_, e) =>
+        _onInbox = (_, e) =>
         {
             var isNew = !e.IsInitialLoad;
             var now = DateTimeOffset.Now;
@@ -385,7 +399,7 @@ public partial class MainViewModel : ObservableObject
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
 
-        polling.NewFeedPostReceived += (_, e) =>
+        _onFeed = (_, e) =>
         {
             var isNew = !e.IsInitialLoad;
             var now = DateTimeOffset.Now;
@@ -404,7 +418,7 @@ public partial class MainViewModel : ObservableObject
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
 
-        polling.NewChannelMessageReceived += (_, e) =>
+        _onChannel = (_, e) =>
         {
             var isNew = !e.IsInitialLoad;
             var now = DateTimeOffset.Now;
@@ -426,7 +440,7 @@ public partial class MainViewModel : ObservableObject
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
 
-        polling.PollCycleCompleted += (_, time) =>
+        _onPollCycle = (_, time) =>
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
@@ -435,7 +449,7 @@ public partial class MainViewModel : ObservableObject
             });
         };
 
-        polling.PollError += (_, error) =>
+        _onPollError = (_, error) =>
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
@@ -443,7 +457,7 @@ public partial class MainViewModel : ObservableObject
             });
         };
 
-        polling.InitialStateLoaded += (_, _) =>
+        _onInitialState = (_, _) =>
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
@@ -454,6 +468,35 @@ public partial class MainViewModel : ObservableObject
                     Channels.SelectedChannel = Channels.Channels[0];
             });
         };
+
+        polling.NewCommentReceived += _onComment;
+        polling.NewInboxMessageReceived += _onInbox;
+        polling.NewFeedPostReceived += _onFeed;
+        polling.NewChannelMessageReceived += _onChannel;
+        polling.PollCycleCompleted += _onPollCycle;
+        polling.PollError += _onPollError;
+        polling.InitialStateLoaded += _onInitialState;
+    }
+
+    private void UnwirePollingEvents()
+    {
+        if (_polling is null) return;
+
+        if (_onComment is not null) _polling.NewCommentReceived -= _onComment;
+        if (_onInbox is not null) _polling.NewInboxMessageReceived -= _onInbox;
+        if (_onFeed is not null) _polling.NewFeedPostReceived -= _onFeed;
+        if (_onChannel is not null) _polling.NewChannelMessageReceived -= _onChannel;
+        if (_onPollCycle is not null) _polling.PollCycleCompleted -= _onPollCycle;
+        if (_onPollError is not null) _polling.PollError -= _onPollError;
+        if (_onInitialState is not null) _polling.InitialStateLoaded -= _onInitialState;
+
+        _onComment = null;
+        _onInbox = null;
+        _onFeed = null;
+        _onChannel = null;
+        _onPollCycle = null;
+        _onPollError = null;
+        _onInitialState = null;
     }
 
     private void AddToAllActivity(ActivityItem item)

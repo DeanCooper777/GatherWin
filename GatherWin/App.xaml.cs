@@ -34,7 +34,29 @@ public partial class App : Application
             .Split(',', StringSplitOptions.RemoveEmptyEntries);
         var pollInterval = int.TryParse(gatherSection["PollIntervalSeconds"], out var pi) ? pi : 60;
         var keysDirectory = gatherSection["KeysDirectory"] ?? string.Empty;
-        var claudeApiKey = gatherSection["ClaudeApiKey"] ?? string.Empty;
+        var claudeApiKeyRaw = gatherSection["ClaudeApiKey"] ?? string.Empty;
+        var claudeApiKey = string.Empty;
+        if (!string.IsNullOrEmpty(claudeApiKeyRaw))
+        {
+            try
+            {
+                if (CredentialProtector.IsPlaintext(claudeApiKeyRaw))
+                {
+                    // Migration: plaintext key found, will encrypt on next save
+                    claudeApiKey = claudeApiKeyRaw;
+                    AppLogger.Log("App", "Plaintext API key detected — will encrypt on next save");
+                }
+                else
+                {
+                    claudeApiKey = CredentialProtector.Unprotect(claudeApiKeyRaw);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogError("App: Failed to decrypt Claude API key", ex);
+                claudeApiKey = string.Empty;
+            }
+        }
         var newBadgeDurationMinutes = int.TryParse(gatherSection["NewBadgeDurationMinutes"], out var nbdm) ? nbdm : 30;
 
         if (string.IsNullOrEmpty(agentId))
@@ -110,6 +132,20 @@ public partial class App : Application
     public static void SaveLocalSettings(string agentId, string watchedPostIds, int pollInterval,
         string keysDirectory, string claudeApiKey, int newBadgeDurationMinutes)
     {
+        // Encrypt the Claude API key before persisting
+        var storedApiKey = string.Empty;
+        if (!string.IsNullOrEmpty(claudeApiKey))
+        {
+            try
+            {
+                storedApiKey = CredentialProtector.Protect(claudeApiKey);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogError("App: Failed to encrypt Claude API key, storing empty", ex);
+            }
+        }
+
         var settings = new Dictionary<string, object>
         {
             ["Gather"] = new Dictionary<string, object>
@@ -118,7 +154,7 @@ public partial class App : Application
                 ["WatchedPostIds"] = watchedPostIds,
                 ["PollIntervalSeconds"] = pollInterval,
                 ["KeysDirectory"] = keysDirectory,
-                ["ClaudeApiKey"] = claudeApiKey,
+                ["ClaudeApiKey"] = storedApiKey,
                 ["NewBadgeDurationMinutes"] = newBadgeDurationMinutes
             }
         };
