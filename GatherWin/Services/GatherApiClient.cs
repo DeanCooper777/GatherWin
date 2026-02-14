@@ -20,6 +20,12 @@ public class GatherApiClient
     private readonly JsonSerializerOptions _jsonOpts;
     private readonly GatherAuthService _auth;
 
+    /// <summary>
+    /// When true, list endpoints request full post bodies via expand=body.
+    /// When false (default), the API returns headlines/summaries only.
+    /// </summary>
+    public bool ShowFullPosts { get; set; }
+
     public GatherApiClient(HttpClient http, JsonSerializerOptions jsonOpts, GatherAuthService auth)
     {
         _http = http;
@@ -106,7 +112,7 @@ public class GatherApiClient
 
     public async Task<GatherPost?> GetPostWithCommentsAsync(string postId, CancellationToken ct)
     {
-        var response = await AuthenticatedGetAsync($"/api/posts/{postId}?expand=comments", ct);
+        var response = await AuthenticatedGetAsync($"/api/posts/{postId}?expand=comments,body", ct);
         if (response is null || !response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
         return JsonSerializer.Deserialize<GatherPost>(body, _jsonOpts);
@@ -125,6 +131,8 @@ public class GatherApiClient
         var url = "/api/posts?limit=50";
         if (since.HasValue)
             url += $"&since={since.Value.UtcDateTime:O}";
+        if (ShowFullPosts)
+            url += "&expand=body";
         var response = await AuthenticatedGetAsync(url, ct);
         if (response is null || !response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
@@ -178,6 +186,52 @@ public class GatherApiClient
             string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>Get posts by a specific agent. Matches by Author name or AuthorId.</summary>
+    public async Task<List<GatherPost>> GetPostsByAgentAsync(string agentName, string? agentId, int limit, CancellationToken ct)
+    {
+        // Fetch posts and filter client-side (API doesn't support author filtering).
+        // API max limit is 100, so paginate if needed to find enough matches.
+        var results = new List<GatherPost>();
+        var offset = 0;
+        const int pageSize = 100;
+        const int maxPages = 5; // Don't fetch more than 500 posts total
+
+        for (var page = 0; page < maxPages && results.Count < limit; page++)
+        {
+            var url = $"/api/posts?limit={pageSize}&offset={offset}&sort=newest";
+            if (ShowFullPosts)
+                url += "&expand=body";
+
+            var response = await AuthenticatedGetAsync(url, ct);
+            if (response is null || !response.IsSuccessStatusCode) break;
+
+            var body = await response.Content.ReadAsStringAsync(ct);
+            var feed = JsonSerializer.Deserialize<FeedResponse>(body, _jsonOpts);
+            if (feed?.Posts is null || feed.Posts.Count == 0) break;
+
+            if (page == 0)
+            {
+                AppLogger.Log("API", $"GetPostsByAgent: searching for agentName=\"{agentName}\" agentId=\"{agentId}\" in up to {feed.Total} total posts");
+                var sample = feed.Posts.Take(5).Select(p => $"Author=\"{p.Author}\" AuthorId=\"{p.AuthorId}\"");
+                AppLogger.Log("API", $"GetPostsByAgent: sample authors: {string.Join("; ", sample)}");
+            }
+
+            var matches = feed.Posts
+                .Where(p =>
+                    string.Equals(p.Author, agentName, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(agentId) && string.Equals(p.AuthorId, agentId, StringComparison.OrdinalIgnoreCase)));
+
+            results.AddRange(matches);
+            offset += pageSize;
+
+            // If we got fewer than a full page, there are no more posts
+            if (feed.Posts.Count < pageSize) break;
+        }
+
+        AppLogger.Log("API", $"GetPostsByAgent: found {results.Count} matching posts (limit={limit})");
+        return results.Take(limit).ToList();
+    }
+
     // ── Discovery / What's New Methods ───────────────────────────
 
     /// <summary>Top posts from last 24 hours (daily digest).</summary>
@@ -192,7 +246,10 @@ public class GatherApiClient
     /// <summary>Posts tagged 'platform' — official announcements.</summary>
     public async Task<FeedResponse?> GetPlatformPostsAsync(CancellationToken ct)
     {
-        var response = await AuthenticatedGetAsync("/api/posts?tag=platform&sort=newest&limit=20", ct);
+        var url = "/api/posts?tag=platform&sort=newest&limit=20";
+        if (ShowFullPosts)
+            url += "&expand=body";
+        var response = await AuthenticatedGetAsync(url, ct);
         if (response is null || !response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
         return JsonSerializer.Deserialize<FeedResponse>(body, _jsonOpts);

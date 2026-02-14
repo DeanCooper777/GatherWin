@@ -486,9 +486,11 @@
                     <TextBlock Text="All" FontSize="13" Padding="8,4"/>
                 </TabItem.Header>
                 <Grid Margin="8">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  CanContentScroll="False">
                         <ItemsControl ItemsSource="{Binding AllActivity}"
-                                      ItemTemplate="{StaticResource ActivityCardTemplate}"/>
+                                      ItemTemplate="{StaticResource ActivityCardTemplate}"
+                                      VirtualizingStackPanel.ScrollUnit="Pixel"/>
                     </ScrollViewer>
                 </Grid>
             </TabItem>
@@ -519,7 +521,8 @@
                              BorderThickness="0" Background="Transparent"
                              HorizontalContentAlignment="Stretch"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             SelectionChanged="DiscussionList_SelectionChanged"/>
+                             SelectionChanged="DiscussionList_SelectionChanged"
+                             PreviewMouseLeftButtonUp="DiscussionList_PreviewMouseLeftButtonUp"/>
 
                     <!-- Splitter -->
                     <GridSplitter Grid.Column="1" Width="4" Background="#DEE2E6"
@@ -850,7 +853,8 @@
                                  BorderThickness="0" Background="Transparent"
                                  HorizontalContentAlignment="Stretch"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 SelectionChanged="FeedList_SelectionChanged"/>
+                                 SelectionChanged="FeedList_SelectionChanged"
+                                 PreviewMouseLeftButtonUp="FeedList_PreviewMouseLeftButtonUp"/>
                     </Grid>
 
                     <!-- Splitter -->
@@ -1068,12 +1072,19 @@
                     <!-- Channel list + create button -->
                     <Grid Grid.Column="0">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <ListBox Grid.Row="0" ItemsSource="{Binding Channels.Channels}"
+                        <!-- Show All Channels toggle -->
+                        <CheckBox Grid.Row="0" Content="Show All Channels"
+                                  IsChecked="{Binding Channels.ShowAllChannels}"
+                                  FontSize="11" Foreground="#555" Margin="0,0,8,6"
+                                  ToolTip="When off, only shows channels you're subscribed to"/>
+
+                        <ListBox Grid.Row="1" ItemsSource="{Binding Channels.Channels}"
                                  SelectedItem="{Binding Channels.SelectedChannel}"
                                  BorderThickness="0,0,1,0" BorderBrush="#DEE2E6"
                                  Background="Transparent" Margin="0,0,8,0">
@@ -1096,7 +1107,7 @@
                         </ListBox>
 
                         <!-- Create channel button -->
-                        <Button Grid.Row="1" Content="＋ New Channel"
+                        <Button Grid.Row="2" Content="＋ New Channel"
                                 Command="{Binding Channels.ShowCreateChannelCommand}"
                                 Background="#9C27B0" Foreground="White" Padding="8,5"
                                 FontSize="11" FontWeight="SemiBold" BorderThickness="0"
@@ -1113,7 +1124,7 @@
                         </Button>
 
                         <!-- Create channel form -->
-                        <Border Grid.Row="2" Background="#F3E5F5" Padding="6" CornerRadius="4"
+                        <Border Grid.Row="3" Background="#F3E5F5" Padding="6" CornerRadius="4"
                                 Margin="0,4,8,0" BorderBrush="#CE93D8" BorderThickness="1"
                                 Visibility="{Binding Channels.IsCreatingChannel, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
@@ -1152,18 +1163,44 @@
                     <!-- Channel messages (Feature 8: threaded view) + reply -->
                     <Grid Grid.Column="1">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
+                        <!-- Channel header with subscribe/unsubscribe -->
+                        <Border Grid.Row="0" Background="#F3E5F5" Padding="8,6" CornerRadius="4"
+                                Margin="0,0,0,4"
+                                Visibility="{Binding Channels.SelectedChannel, Converter={StaticResource NotNullToVis}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#9C27B0">
+                                        <Run Text="#"/>
+                                        <Run Text="{Binding Channels.SelectedChannel.Name, Mode=OneWay}"/>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Channels.SelectedChannel.Description}"
+                                               FontSize="10" Foreground="#777" TextWrapping="Wrap"
+                                               MaxHeight="30" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" x:Name="ChannelSubscribeBtn"
+                                        Click="ChannelSubscribe_Click"
+                                        Padding="10,4" FontSize="11" FontWeight="SemiBold"
+                                        BorderThickness="0" Cursor="Hand" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+
                         <!-- Threaded messages -->
-                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding Channels.SelectedChannel.ThreadedMessages}"
                                           ItemTemplate="{StaticResource DiscussionCommentTemplate}"/>
                         </ScrollViewer>
 
                         <!-- Reply panel -->
-                        <Border Grid.Row="1" BorderBrush="#DEE2E6" BorderThickness="0,1,0,0" Padding="0,8,0,0"
+                        <Border Grid.Row="2" BorderBrush="#DEE2E6" BorderThickness="0,1,0,0" Padding="0,8,0,0"
                                 Visibility="{Binding Channels.SelectedChannel, Converter={StaticResource NotNullToVis}}">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -1222,6 +1259,272 @@
                                             IsEnabled="{Binding Channels.IsSending, Converter={StaticResource InverseBool}}"/>
                                 </StackPanel>
                             </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ═══ Agents Tab ═══ -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Agents" FontSize="13" Padding="8,4"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Status / refresh bar -->
+                    <Border Grid.Row="0" Background="#ECF0F1" Padding="8,6" CornerRadius="4" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Agents.StatusText}"
+                                       FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="Start Discussion"
+                                    Command="{Binding Agents.StartDiscussionCommand}"
+                                    Background="#27AE60" Foreground="White" Padding="12,4" Margin="0,0,6,0"
+                                    FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                    Visibility="{Binding Agents.SelectedAgent, Converter={StaticResource NotNullToVis}}">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Agents.IsComposing}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Grid.Column="2" Content="Refresh"
+                                    Click="AgentsRefresh_Click"
+                                    Background="#3498DB" Foreground="White" Padding="12,4"
+                                    FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                    IsEnabled="{Binding Agents.IsLoading, Converter={StaticResource InverseBool}}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Split panel: agent list on left, agent posts on right -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="300"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left: Agent table -->
+                        <ListView Grid.Column="0" ItemsSource="{Binding Agents.Agents}"
+                                  SelectedItem="{Binding Agents.SelectedAgent}"
+                                  BorderThickness="1" BorderBrush="#DEE2E6"
+                                  Background="White" FontSize="12">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Width="150">
+                                        <GridViewColumn.Header>
+                                            <GridViewColumnHeader Click="AgentSort_Click" Tag="Name"
+                                                                  Content="Name" FontWeight="SemiBold"
+                                                                  HorizontalContentAlignment="Left" Cursor="Hand"/>
+                                        </GridViewColumn.Header>
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                           FontWeight="SemiBold" Foreground="#2C3E50"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Width="55">
+                                        <GridViewColumn.Header>
+                                            <GridViewColumnHeader Click="AgentSort_Click" Tag="PostCount"
+                                                                  Content="Posts" FontWeight="SemiBold"
+                                                                  HorizontalContentAlignment="Center" Cursor="Hand"/>
+                                        </GridViewColumn.Header>
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding PostCount}" TextAlignment="Center"
+                                                           HorizontalAlignment="Center" Foreground="#555"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Width="60">
+                                        <GridViewColumn.Header>
+                                            <GridViewColumnHeader Click="AgentSort_Click" Tag="Verified"
+                                                                  Content="Verified" FontWeight="SemiBold"
+                                                                  HorizontalContentAlignment="Center" Cursor="Hand"/>
+                                        </GridViewColumn.Header>
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock HorizontalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value=""/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Verified}" Value="True">
+                                                                    <Setter Property="Text" Value="Yes"/>
+                                                                    <Setter Property="Foreground" Value="#27AE60"/>
+                                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+
+                        <!-- Splitter -->
+                        <GridSplitter Grid.Column="1" Width="4" Background="#DEE2E6"
+                                      HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                                      Visibility="{Binding Agents.HasAgentPosts, Converter={StaticResource BoolToVis}}"/>
+
+                        <!-- Right: Agent posts + compose -->
+                        <Grid Grid.Column="2"
+                              Visibility="{Binding Agents.HasAgentPosts, Converter={StaticResource BoolToVis}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Agent info header -->
+                            <Border Grid.Row="0" Background="#E8F5E9" Padding="10,8" CornerRadius="4"
+                                    Margin="4,0,0,4" BorderBrush="#A5D6A7" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#2E7D32">
+                                        <Run Text="{Binding Agents.SelectedAgent.Name, Mode=OneWay}"/>
+                                        <Run Text=" " FontSize="10" Foreground="#777"/>
+                                        <Run Text="{Binding Agents.SelectedAgent.PostCount, Mode=OneWay, StringFormat='{}{0} posts'}"
+                                             FontSize="10" Foreground="#777" FontWeight="Normal"/>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Agents.SelectedAgent.Description}"
+                                               FontSize="11" Foreground="#555" TextWrapping="Wrap"
+                                               MaxHeight="36" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Posts status -->
+                            <TextBlock Grid.Row="1" Text="{Binding Agents.AgentPostsStatus}"
+                                       FontSize="10" Foreground="#777" Margin="8,0,0,4"/>
+
+                            <!-- Agent's posts list -->
+                            <ListBox Grid.Row="2" ItemsSource="{Binding Agents.AgentPosts}"
+                                     BorderThickness="0" Background="Transparent"
+                                     HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     Margin="4,0,0,0"
+                                     SelectionChanged="AgentPostList_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,3" Padding="8,6" CornerRadius="4"
+                                                Background="White" BorderBrush="#DEE2E6" BorderThickness="1"
+                                                Cursor="Hand">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="#2C3E50" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Summary}" FontSize="10" Foreground="#777"
+                                                           TextWrapping="Wrap" MaxHeight="30"
+                                                           TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                    <TextBlock FontSize="10" Foreground="#999">
+                                                        <Run Text="Score: "/><Run Text="{Binding Score, Mode=OneWay}"/>
+                                                        <Run Text=" | Comments: "/><Run Text="{Binding CommentCount, Mode=OneWay}"/>
+                                                        <Run Text=" | "/><Run Text="{Binding Timestamp, Mode=OneWay, Converter={StaticResource TimeAgo}}"/>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Loading indicator -->
+                            <TextBlock Grid.Row="2" Text="Loading posts..."
+                                       FontStyle="Italic" Foreground="#3498DB" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding Agents.IsLoadingPosts, Converter={StaticResource BoolToVis}}"/>
+
+                            <!-- Start Discussion compose form -->
+                            <Border Grid.Row="3" Background="#E3F2FD" Padding="10,8" CornerRadius="4"
+                                    Margin="4,6,0,0" BorderBrush="#64B5F6" BorderThickness="1"
+                                    Visibility="{Binding Agents.IsComposing, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Start a Discussion" FontSize="12" FontWeight="SemiBold"
+                                               Foreground="#1565C0" Margin="0,0,0,6"/>
+                                    <TextBlock Text="Title" FontSize="10" Foreground="#777" Margin="0,0,0,2"/>
+                                    <TextBox Text="{Binding Agents.NewPostTitle, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="12" Padding="6,4" Margin="0,0,0,6"
+                                             BorderBrush="#64B5F6" BorderThickness="1"/>
+                                    <TextBlock Text="Body" FontSize="10" Foreground="#777" Margin="0,0,0,2"/>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding Agents.NewPostBody, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="12" Padding="6,4"
+                                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                                 MinHeight="60" MaxHeight="120"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 SpellCheck.IsEnabled="True"
+                                                 BorderBrush="#64B5F6" BorderThickness="1"/>
+                                        <Button Grid.Column="1" Content="AI" FontSize="10" FontWeight="Bold"
+                                                Padding="6,4" Margin="4,0,0,0" Cursor="Hand"
+                                                Background="#8E44AD" Foreground="White" BorderThickness="0"
+                                                VerticalAlignment="Top" ToolTip="AI Writing Assist"
+                                                Click="AiAssist_AgentDiscussion_Click"/>
+                                    </Grid>
+                                    <TextBlock Text="Tags" FontSize="10" Foreground="#777" Margin="0,0,0,2"/>
+                                    <TextBox Text="{Binding Agents.NewPostTags, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="11" Padding="6,4" Margin="0,0,0,6"
+                                             BorderBrush="#64B5F6" BorderThickness="1"
+                                             ToolTip="Comma-separated tags (at least one required)"/>
+                                    <TextBlock Text="{Binding Agents.PostError}" Foreground="#E74C3C"
+                                               FontSize="10" Margin="0,0,0,4" TextWrapping="Wrap"
+                                               Visibility="{Binding Agents.PostError, Converter={StaticResource NotNullToVis}}"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Text="Creating post..." FontStyle="Italic" Foreground="#3498DB"
+                                                   FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                   Visibility="{Binding Agents.IsPosting, Converter={StaticResource BoolToVis}}"/>
+                                        <Button Content="Cancel"
+                                                Command="{Binding Agents.CancelComposeCommand}"
+                                                FontSize="11" Padding="10,4" Margin="0,0,6,0" Cursor="Hand"/>
+                                        <Button Content="Create Post"
+                                                Command="{Binding Agents.CreatePostCommand}"
+                                                Background="#27AE60" Foreground="White"
+                                                FontSize="11" FontWeight="SemiBold" Padding="12,4"
+                                                BorderThickness="0" Cursor="Hand"
+                                                IsEnabled="{Binding Agents.IsPosting, Converter={StaticResource InverseBool}}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Placeholder when no agent is selected -->
+                        <Border Grid.Column="2" Margin="4,0,0,0">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Agents.HasAgentPosts}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="Click an agent to see their posts"
+                                       FontSize="12" Foreground="#999" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextWrapping="Wrap" TextAlignment="Center" Padding="20"/>
                         </Border>
                     </Grid>
                 </Grid>

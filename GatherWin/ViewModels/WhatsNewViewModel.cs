@@ -42,6 +42,21 @@ public class WhatsNewOptions
     /// Applied as a LayoutTransform on the entire window content.
     /// </summary>
     public int FontScalePercent { get; set; } = 100;
+
+    // ── Channels tab settings ────────────────────────────────────
+    public int MaxChannelsTab { get; set; } = 50;
+    public bool ShowAllChannels { get; set; }
+    public List<string> SubscribedChannelIds { get; set; } = new();
+
+    // ── Agents tab settings ──────────────────────────────────────
+    public int MaxAgentsTab { get; set; } = 50;
+
+    // ── Post display ──────────────────────────────────────────────
+    /// <summary>
+    /// When true, request full post bodies from the API instead of summaries.
+    /// Uses more API tokens but shows complete post content everywhere.
+    /// </summary>
+    public bool ShowFullPosts { get; set; }
 }
 
 public partial class WhatsNewViewModel : ObservableObject
@@ -199,7 +214,7 @@ public partial class WhatsNewViewModel : ObservableObject
                     {
                         Category = "Platform Announcement",
                         Title = post.Title ?? post.Summary ?? "(untitled)",
-                        Description = TruncateBody(post.Body ?? post.Summary ?? ""),
+                        Description = FormatBody(post.Body ?? post.Summary ?? ""),
                         Detail = $"By: {post.Author ?? "platform"} | Score: {post.Score}",
                         Timestamp = ParseTimestamp(post.Created),
                         IsNew = isNew,
@@ -224,7 +239,7 @@ public partial class WhatsNewViewModel : ObservableObject
                     {
                         Category = "Trending Post",
                         Title = post.Title ?? post.Summary ?? "(untitled)",
-                        Description = TruncateBody(post.Summary ?? ""),
+                        Description = FormatBody(post.Summary ?? ""),
                         Detail = $"By: {post.Author ?? "unknown"} | Score: {post.Score} | Comments: {post.CommentCount} | Weight: {post.Weight:F2}",
                         Timestamp = ParseTimestamp(post.Created),
                         IsNew = isNew,
@@ -277,6 +292,32 @@ public partial class WhatsNewViewModel : ObservableObject
                 });
 
                 _state.LastOpenApiSpecHash = specHash;
+            }
+
+            // If ShowFullPosts is enabled, fetch full bodies for post entries
+            if (_options.ShowFullPosts)
+            {
+                var postEntries = Entries.Where(e => !string.IsNullOrEmpty(e.PostId)).ToList();
+                foreach (var entry in postEntries)
+                {
+                    try
+                    {
+                        var fullPost = await _api.GetPostWithCommentsAsync(entry.PostId!, ct);
+                        if (fullPost?.Body is not null)
+                        {
+                            Application.Current?.Dispatcher?.Invoke(() =>
+                            {
+                                entry.Description = fullPost.Body;
+                            });
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        AppLogger.LogError($"WhatsNew: failed to fetch full body for {entry.PostId}", ex);
+                    }
+                }
+                AppLogger.Log("WhatsNew", $"Fetched full bodies for {postEntries.Count} post entries");
             }
 
             // Update state
@@ -618,9 +659,10 @@ public partial class WhatsNewViewModel : ObservableObject
 
     // ── Helpers ──────────────────────────────────────────────────
 
-    private static string TruncateBody(string text, int maxLength = 200)
+    private string FormatBody(string text, int maxLength = 200)
     {
         if (string.IsNullOrEmpty(text)) return "(empty)";
+        if (_options.ShowFullPosts) return text;
         if (text.Length <= maxLength) return text;
         return text[..maxLength] + "...";
     }

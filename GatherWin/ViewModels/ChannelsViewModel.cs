@@ -25,6 +25,10 @@ public partial class ChannelsViewModel : ObservableObject
 {
     private readonly GatherApiClient _api;
 
+    /// <summary>All channels from the API (unfiltered master list).</summary>
+    private readonly List<ChannelInfo> _allChannels = new();
+
+    /// <summary>Filtered channels displayed in the UI.</summary>
     public ObservableCollection<ChannelInfo> Channels { get; } = new();
 
     [ObservableProperty] private ChannelInfo? _selectedChannel;
@@ -32,6 +36,21 @@ public partial class ChannelsViewModel : ObservableObject
     [ObservableProperty] private bool _isSending;
     [ObservableProperty] private int _newCount;
     [ObservableProperty] private string? _sendError;
+    [ObservableProperty] private bool _isLoadingChannels;
+
+    // ── Show All / Subscribe state ───────────────────────────────
+    [ObservableProperty] private bool _showAllChannels;
+    private HashSet<string> _subscribedChannelIds = new();
+
+    private int _maxChannels = 50;
+    public int MaxChannels
+    {
+        get => _maxChannels;
+        set => SetProperty(ref _maxChannels, value);
+    }
+
+    /// <summary>Callback to persist subscribed channel IDs.</summary>
+    public Action? SubscriptionChanged { get; set; }
 
     // ── Reply-to state for threaded messages (Feature 8) ─────────
     [ObservableProperty] private DiscussionComment? _replyToMessage;
@@ -48,6 +67,221 @@ public partial class ChannelsViewModel : ObservableObject
         _api = api;
     }
 
+    partial void OnShowAllChannelsChanged(bool value)
+    {
+        ApplyFilter();
+        SubscriptionChanged?.Invoke();
+    }
+
+    public HashSet<string> SubscribedChannelIds => _subscribedChannelIds;
+
+    public void SetSubscribedChannelIds(HashSet<string> ids)
+    {
+        _subscribedChannelIds = ids;
+        ApplyFilter();
+    }
+
+    public bool IsSubscribed(string channelId) => _subscribedChannelIds.Contains(channelId);
+
+    public void Subscribe(string channelId)
+    {
+        if (_subscribedChannelIds.Add(channelId))
+        {
+            OnPropertyChanged(nameof(SubscribedChannelIds));
+            SubscriptionChanged?.Invoke();
+            // Don't re-filter — the channel is already visible (user is looking at it)
+        }
+    }
+
+    public void Unsubscribe(string channelId)
+    {
+        if (_subscribedChannelIds.Remove(channelId))
+        {
+            OnPropertyChanged(nameof(SubscribedChannelIds));
+            SubscriptionChanged?.Invoke();
+            // Don't re-filter — keep the channel visible so the user doesn't lose their discussion.
+            // The filter will apply next time ShowAllChannels changes or channels are reloaded.
+        }
+    }
+
+    /// <summary>Load all channels from the API, and pre-load messages for subscribed channels.</summary>
+    public async Task LoadAllChannelsAsync(CancellationToken ct)
+    {
+        if (IsLoadingChannels) return;
+        IsLoadingChannels = true;
+
+        try
+        {
+            var response = await _api.GetChannelsAsync(ct);
+            if (response?.Channels is not null)
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    _allChannels.Clear();
+                    foreach (var ch in response.Channels.Take(MaxChannels))
+                    {
+                        var info = _allChannels.FirstOrDefault(c => c.Id == ch.Id)
+                            ?? Channels.FirstOrDefault(c => c.Id == ch.Id);
+                        if (info is null)
+                        {
+                            info = new ChannelInfo
+                            {
+                                Id = ch.Id ?? "",
+                                Name = ch.Name ?? "",
+                                Description = ch.Description ?? "",
+                                MemberCount = ch.MemberCount
+                            };
+                        }
+                        else
+                        {
+                            info.Name = ch.Name ?? info.Name;
+                            info.Description = ch.Description ?? info.Description;
+                            info.MemberCount = ch.MemberCount;
+                        }
+                        _allChannels.Add(info);
+                    }
+                    ApplyFilter();
+                });
+
+                AppLogger.Log("Channels", $"Loaded {response.Channels.Count} channels (max={MaxChannels})");
+
+                // Pre-load messages for subscribed channels so they're visible immediately
+                var subscribedChannels = _allChannels
+                    .Where(c => _subscribedChannelIds.Contains(c.Id))
+                    .ToList();
+
+                foreach (var ch in subscribedChannels)
+                {
+                    try
+                    {
+                        var msgResp = await _api.GetChannelMessagesAsync(ch.Id, DateTimeOffset.UtcNow.AddDays(-7), ct);
+                        if (msgResp?.Messages is not null)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                foreach (var m in msgResp.Messages)
+                                {
+                                    var threadedMsg = new DiscussionComment
+                                    {
+                                        CommentId = m.Id ?? "",
+                                        Author = m.AuthorName ?? m.AuthorId ?? "unknown",
+                                        Body = m.Body ?? "(empty)",
+                                        Timestamp = ParseTimestamp(m.Created),
+                                        IndentLevel = 0,
+                                        ReplyToId = m.ReplyTo
+                                    };
+
+                                    // Build thread hierarchy
+                                    if (!string.IsNullOrEmpty(m.ReplyTo))
+                                    {
+                                        var parentIdx = -1;
+                                        for (int i = 0; i < ch.ThreadedMessages.Count; i++)
+                                        {
+                                            if (ch.ThreadedMessages[i].CommentId == m.ReplyTo)
+                                            {
+                                                parentIdx = i;
+                                                threadedMsg.IndentLevel = ch.ThreadedMessages[i].IndentLevel + 1;
+                                                break;
+                                            }
+                                        }
+                                        if (parentIdx >= 0)
+                                        {
+                                            int insertAt = parentIdx + 1;
+                                            while (insertAt < ch.ThreadedMessages.Count &&
+                                                   ch.ThreadedMessages[insertAt].IndentLevel > ch.ThreadedMessages[parentIdx].IndentLevel)
+                                                insertAt++;
+                                            ch.ThreadedMessages.Insert(insertAt, threadedMsg);
+                                        }
+                                        else
+                                        {
+                                            ch.ThreadedMessages.Add(threadedMsg);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        ch.ThreadedMessages.Add(threadedMsg);
+                                    }
+
+                                    // Also add to flat Messages collection
+                                    var item = new ActivityItem
+                                    {
+                                        Type = ActivityType.Channel,
+                                        Id = m.Id ?? "",
+                                        Title = ch.Name,
+                                        Author = m.AuthorName ?? m.AuthorId ?? "unknown",
+                                        Body = m.Body ?? "(empty)",
+                                        Timestamp = ParseTimestamp(m.Created),
+                                        ChannelId = ch.Id,
+                                        ChannelName = ch.Name,
+                                        IsNew = false
+                                    };
+                                    InsertSorted(ch.Messages, item);
+                                }
+                            });
+
+                            AppLogger.Log("Channels", $"Pre-loaded {msgResp.Messages.Count} messages for #{ch.Name}");
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        AppLogger.LogError($"Channels: failed to pre-load messages for #{ch.Name}", ex);
+                    }
+                }
+
+                // Auto-select the first subscribed channel if only one
+                if (SelectedChannel is null && subscribedChannels.Count > 0)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        SelectedChannel = Channels.FirstOrDefault(c => c.Id == subscribedChannels[0].Id);
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Channels: load all channels failed", ex);
+        }
+        finally
+        {
+            IsLoadingChannels = false;
+        }
+    }
+
+    private static DateTimeOffset ParseTimestamp(string? ts)
+    {
+        if (ts is not null && DateTimeOffset.TryParse(ts, out var dto))
+            return dto;
+        return DateTimeOffset.UtcNow;
+    }
+
+    private void ApplyFilter()
+    {
+        void DoFilter()
+        {
+            var selected = SelectedChannel;
+            Channels.Clear();
+
+            var source = ShowAllChannels
+                ? _allChannels
+                : _allChannels.Where(c => _subscribedChannelIds.Contains(c.Id)).ToList();
+
+            foreach (var ch in source)
+                Channels.Add(ch);
+
+            // Restore selection if possible
+            if (selected is not null)
+                SelectedChannel = Channels.FirstOrDefault(c => c.Id == selected.Id);
+        }
+
+        if (Application.Current?.Dispatcher is not null)
+            Application.Current.Dispatcher.Invoke(DoFilter);
+        else
+            DoFilter();
+    }
+
     public void AddMessage(string channelId, string channelName, string messageId, string author,
         string body, DateTimeOffset timestamp, bool isNew = true, string? replyTo = null)
     {
@@ -60,6 +294,10 @@ public partial class ChannelsViewModel : ObservableObject
                 channel = new ChannelInfo { Id = channelId, Name = channelName };
                 Channels.Add(channel);
             }
+
+            // Skip duplicates (messages may already be pre-loaded)
+            if (channel.Messages.Any(m => m.Id == messageId))
+                return;
 
             var item = new ActivityItem
             {

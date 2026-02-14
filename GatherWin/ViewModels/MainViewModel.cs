@@ -60,6 +60,7 @@ public partial class MainViewModel : ObservableObject
     public FeedViewModel Feed { get; }
     public ChannelsViewModel Channels { get; }
     public WhatsNewViewModel WhatsNew { get; }
+    public AgentsViewModel Agents { get; }
     public ObservableCollection<ActivityItem> AllActivity { get; } = new();
 
     public string AgentId => _agentId;
@@ -94,10 +95,30 @@ public partial class MainViewModel : ObservableObject
         Feed = new FeedViewModel(api);
         Channels = new ChannelsViewModel(api);
         WhatsNew = new WhatsNewViewModel(api, keysDirectory);
+        Agents = new AgentsViewModel(api);
+
+        // Apply saved post display preference
+        _api.ShowFullPosts = WhatsNew.Options.ShowFullPosts;
 
         // Wire subscribe/unsubscribe callbacks
         Feed.SubscribeRequested = postId => _ = SubscribeToPostAsync(postId);
         Comments.UnsubscribeRequested = postId => UnsubscribeFromPost(postId);
+
+        // Apply saved channel settings
+        Channels.MaxChannels = WhatsNew.Options.MaxChannelsTab;
+        Channels.ShowAllChannels = WhatsNew.Options.ShowAllChannels;
+        Channels.SetSubscribedChannelIds(new HashSet<string>(WhatsNew.Options.SubscribedChannelIds));
+        Channels.SubscriptionChanged = () =>
+        {
+            WhatsNew.Options.SubscribedChannelIds = Channels.SubscribedChannelIds.ToList();
+            WhatsNew.Options.ShowAllChannels = Channels.ShowAllChannels;
+            WhatsNew.SaveOptions();
+        };
+
+        // Apply saved agents settings
+        Agents.MaxAgents = WhatsNew.Options.MaxAgentsTab;
+        Agents.PostCreated = postId => _ = SubscribeToPostAsync(postId);
+        Agents.NavigateToPost = postId => _ = NavigateToDiscussionsTabAsync(postId);
 
         // Apply saved font scale
         FontScale = WhatsNew.Options.FontScalePercent / 100.0;
@@ -132,6 +153,11 @@ public partial class MainViewModel : ObservableObject
             case 3: Feed.ResetNewCount(); break;
             case 4: Channels.ResetNewCount(); break;
             case 5:
+                // Auto-load agents when switching to Agents tab (only if not already loaded)
+                if (IsConnected && !Agents.IsLoading && Agents.Agents.Count == 0)
+                    _ = Agents.LoadAgentsAsync(CancellationToken.None);
+                break;
+            case 6:
                 WhatsNew.ResetNewCount();
                 // Auto-check when switching to What's New tab (if connected)
                 if (IsConnected && !WhatsNew.IsChecking)
@@ -251,6 +277,10 @@ public partial class MainViewModel : ObservableObject
             // Fetch watched post stats and populate Discussions list
             AppLogger.Log("VM", $"Loading stats for {_watchedPostIds.Length} watched posts...");
             await LoadWatchedPostStatsAsync(ct);
+
+            // Load all channels for the Channels tab
+            AppLogger.Log("VM", "Loading all channels...");
+            await Channels.LoadAllChannelsAsync(ct);
 
             // Start polling
             AppLogger.Log("VM", "Starting polling service...");
@@ -533,8 +563,8 @@ public partial class MainViewModel : ObservableObject
     {
         AppLogger.Log("VM", $"Navigating to post discussion: {postId}");
 
-        // Switch to What's New tab (index 5)
-        SelectedTabIndex = 5;
+        // Switch to What's New tab (index 6)
+        SelectedTabIndex = 6;
 
         // Create a minimal WhatsNewEntry for the post and load its discussion
         var post = await _api.GetPostWithCommentsAsync(postId, CancellationToken.None);
@@ -555,6 +585,29 @@ public partial class MainViewModel : ObservableObject
         };
 
         await WhatsNew.LoadDiscussionAsync(entry, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Navigate to the Discussions tab and open a specific post's discussion.
+    /// Subscribes to the post if not already watched.
+    /// </summary>
+    public async Task NavigateToDiscussionsTabAsync(string postId)
+    {
+        AppLogger.Log("VM", $"Navigating to discussions for post: {postId}");
+
+        // Ensure we're subscribed so it appears in the Discussions list
+        if (!_watchedPostIds.Contains(postId))
+            await SubscribeToPostAsync(postId);
+
+        // Switch to Discussions tab (index 1)
+        SelectedTabIndex = 1;
+
+        // Find or wait for the discussion item
+        var disc = Comments.Discussions.FirstOrDefault(d => d.PostId == postId);
+        if (disc is not null)
+        {
+            await Comments.LoadDiscussionAsync(disc, CancellationToken.None);
+        }
     }
 
     // ── Subscribe / Unsubscribe (Features 4 & 5) ────────────────
@@ -649,6 +702,115 @@ public partial class MainViewModel : ObservableObject
         Feed.Posts.Clear();
     }
 
+    /// <summary>
+    /// Re-fetches post content for all currently displayed items after the
+    /// ShowFullPosts setting changes. When <paramref name="showFull"/> is true
+    /// each post is fetched individually to get the full body; when false the
+    /// feed list endpoint is re-fetched (returns summaries) and matched back.
+    /// </summary>
+    private async Task RefreshPostBodiesAsync(bool showFull, CancellationToken ct)
+    {
+        // ── Feed / All tab items ─────────────────────────────────────
+        var feedItems = AllActivity
+            .Where(a => a.Type == ActivityType.FeedPost && !string.IsNullOrEmpty(a.Id))
+            .ToList();
+        var feedPostItems = Feed.Posts
+            .Where(a => a.Type == ActivityType.FeedPost && !string.IsNullOrEmpty(a.Id))
+            .ToList();
+
+        // Combine and deduplicate by ID
+        var allItems = feedItems.Concat(feedPostItems)
+            .GroupBy(a => a.Id)
+            .Select(g => g.ToList())
+            .ToList();
+
+        if (allItems.Count > 0)
+        {
+            AppLogger.Log("VM", $"Refreshing post bodies ({(showFull ? "full" : "summary")}) for {allItems.Count} posts...");
+
+            if (showFull)
+            {
+                // Fetch each post individually for full body
+                foreach (var group in allItems)
+                {
+                    try
+                    {
+                        var post = await _api.GetPostWithCommentsAsync(group[0].Id, ct);
+                        if (post?.Body is not null)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                foreach (var item in group)
+                                    item.Body = post.Body;
+                            });
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        AppLogger.LogError($"VM: failed to refresh body for post {group[0].Id}", ex);
+                    }
+                }
+            }
+            else
+            {
+                // Re-fetch the feed list (without expand=body) to get summaries
+                var feed = await _api.GetFeedPostsAsync(null, ct);
+                if (feed?.Posts is not null)
+                {
+                    var lookup = feed.Posts
+                        .Where(p => p.Id is not null)
+                        .ToDictionary(p => p.Id!, p => p.Summary ?? p.Body ?? "");
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        foreach (var group in allItems)
+                        {
+                            if (lookup.TryGetValue(group[0].Id, out var summary))
+                            {
+                                foreach (var item in group)
+                                    item.Body = summary;
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        // ── Agent posts panel ────────────────────────────────────────
+        if (Agents.HasAgentPosts && Agents.AgentPosts.Count > 0)
+        {
+            if (showFull)
+            {
+                foreach (var agentPost in Agents.AgentPosts.ToList())
+                {
+                    try
+                    {
+                        var post = await _api.GetPostWithCommentsAsync(agentPost.PostId, ct);
+                        if (post?.Body is not null)
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                                agentPost.Summary = post.Body);
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        AppLogger.LogError($"VM: failed to refresh agent post body {agentPost.PostId}", ex);
+                    }
+                }
+            }
+            else
+            {
+                // Re-load agent posts (API will return summaries since ShowFullPosts is now off)
+                if (Agents.SelectedAgent is not null)
+                    _ = Agents.ReloadAgentPostsAsync(ct);
+            }
+        }
+
+        AppLogger.Log("VM", "Post body refresh complete");
+    }
+
     [RelayCommand]
     private void OpenOptions()
     {
@@ -680,6 +842,23 @@ public partial class MainViewModel : ObservableObject
             WhatsNew.Options.MaxAgents = dialog.MaxAgents;
             WhatsNew.Options.MaxSkills = dialog.MaxSkills;
 
+            // Apply Channels tab options
+            WhatsNew.Options.MaxChannelsTab = dialog.MaxChannelsTab;
+            Channels.MaxChannels = dialog.MaxChannelsTab;
+
+            // Apply Agents tab options
+            WhatsNew.Options.MaxAgentsTab = dialog.MaxAgentsTab;
+            Agents.MaxAgents = dialog.MaxAgentsTab;
+
+            // Apply post display option
+            var fullPostsChanged = WhatsNew.Options.ShowFullPosts != dialog.ShowFullPosts;
+            WhatsNew.Options.ShowFullPosts = dialog.ShowFullPosts;
+            _api.ShowFullPosts = dialog.ShowFullPosts;
+
+            // Refresh existing post bodies when the setting changes
+            if (fullPostsChanged)
+                _ = RefreshPostBodiesAsync(dialog.ShowFullPosts, CancellationToken.None);
+
             // Apply font scale
             WhatsNew.Options.FontScalePercent = dialog.FontScalePercent;
             FontScale = dialog.FontScalePercent / 100.0;
@@ -692,6 +871,8 @@ public partial class MainViewModel : ObservableObject
 
             AppLogger.Log("VM", $"Options saved: PollInterval={_pollIntervalSeconds}s, " +
                 $"MaxDigest={dialog.MaxDigestPosts}, MaxPlatform={dialog.MaxPlatformPosts}, " +
+                $"MaxChannelsTab={dialog.MaxChannelsTab}, MaxAgentsTab={dialog.MaxAgentsTab}, " +
+                $"ShowFullPosts={dialog.ShowFullPosts}, " +
                 $"FontScale={dialog.FontScalePercent}%, BadgeDuration={_newBadgeDurationMinutes}min");
         }
     }

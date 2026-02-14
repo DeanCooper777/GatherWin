@@ -29,6 +29,7 @@ public partial class MainWindow : Window
             IsCurrentUserToVisibilityConverter.CurrentUserName = viewModel.CurrentAgentName;
 
         // Update converter when agent name is fetched after connect
+        // Also update channel subscribe button when selected channel changes
         _onPropertyChanged = (_, args) =>
         {
             if (args.PropertyName == nameof(MainViewModel.CurrentAgentName) &&
@@ -36,6 +37,12 @@ public partial class MainWindow : Window
             {
                 IsCurrentUserToVisibilityConverter.CurrentUserName = viewModel.CurrentAgentName;
             }
+        };
+
+        viewModel.Channels.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ChannelsViewModel.SelectedChannel))
+                Dispatcher.Invoke(UpdateChannelSubscribeButton);
         };
         viewModel.PropertyChanged += _onPropertyChanged;
 
@@ -174,7 +181,7 @@ public partial class MainWindow : Window
                 case 4: // Channels
                     _viewModel.Channels.SetReplyTo(comment);
                     break;
-                case 5: // What's New
+                case 6: // What's New
                     _viewModel.WhatsNew.SetReplyTo(comment);
                     break;
             }
@@ -194,6 +201,16 @@ public partial class MainWindow : Window
         if (sender is ListBox lb && lb.SelectedItem is WatchedDiscussionItem disc)
         {
             _ = _viewModel.Comments.LoadDiscussionAsync(disc, CancellationToken.None);
+        }
+    }
+
+    private void DiscussionList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBox lb && lb.SelectedItem is WatchedDiscussionItem disc)
+        {
+            var item = lb.ItemContainerGenerator.ContainerFromItem(disc) as ListBoxItem;
+            if (item is not null && item.IsMouseOver)
+                _ = _viewModel.Comments.LoadDiscussionAsync(disc, CancellationToken.None);
         }
     }
 
@@ -233,6 +250,18 @@ public partial class MainWindow : Window
         }
     }
 
+    private void FeedList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        // SelectionChanged doesn't fire when re-clicking the already-selected item.
+        // Detect that case and reload the discussion anyway.
+        if (sender is ListBox lb && lb.SelectedItem is ActivityItem post)
+        {
+            var item = lb.ItemContainerGenerator.ContainerFromItem(post) as ListBoxItem;
+            if (item is not null && item.IsMouseOver)
+                _ = _viewModel.Feed.LoadDiscussionAsync(post, CancellationToken.None);
+        }
+    }
+
     private void CloseFeedDiscussion_Click(object sender, RoutedEventArgs e)
     {
         _viewModel.Feed.CloseDiscussion();
@@ -264,6 +293,73 @@ public partial class MainWindow : Window
     private void CancelChannelReplyTo_Click(object sender, RoutedEventArgs e)
     {
         _viewModel.Channels.SetReplyTo(null);
+    }
+
+    // ── Channel subscribe/unsubscribe ──────────────────────────────
+
+    private void ChannelSubscribe_Click(object sender, RoutedEventArgs e)
+    {
+        var channel = _viewModel.Channels.SelectedChannel;
+        if (channel is null) return;
+
+        if (_viewModel.Channels.IsSubscribed(channel.Id))
+            _viewModel.Channels.Unsubscribe(channel.Id);
+        else
+            _viewModel.Channels.Subscribe(channel.Id);
+
+        UpdateChannelSubscribeButton();
+    }
+
+    private void UpdateChannelSubscribeButton()
+    {
+        var channel = _viewModel.Channels.SelectedChannel;
+        if (channel is null) return;
+
+        var isSubscribed = _viewModel.Channels.IsSubscribed(channel.Id);
+        ChannelSubscribeBtn.Content = isSubscribed ? "Unsubscribe" : "Subscribe";
+        ChannelSubscribeBtn.Background = isSubscribed
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE7, 0x4C, 0x3C))
+            : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x27, 0xAE, 0x60));
+        ChannelSubscribeBtn.Foreground = System.Windows.Media.Brushes.White;
+    }
+
+    // ── Agents tab ───────────────────────────────────────────────────
+
+    private void AgentSort_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.GridViewColumnHeader header && header.Tag is string column)
+        {
+            _viewModel.Agents.SortBy(column);
+
+            // Update column header text with sort indicators
+            UpdateAgentSortHeaders();
+        }
+    }
+
+    private void UpdateAgentSortHeaders()
+    {
+        // Headers will show sort arrows via the click handler
+        // The sort state is tracked in AgentsViewModel
+    }
+
+    private void AgentsRefresh_Click(object sender, RoutedEventArgs e)
+    {
+        _ = _viewModel.Agents.LoadAgentsAsync(CancellationToken.None);
+    }
+
+    private void AgentPostList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListBox lb && lb.SelectedItem is AgentPostItem post)
+        {
+            lb.SelectedItem = null; // Don't keep selection — just navigate
+            _viewModel.Agents.OpenPost(post.PostId);
+        }
+    }
+
+    private void AiAssist_AgentDiscussion_Click(object sender, RoutedEventArgs e)
+    {
+        RunAiAssist(_viewModel.Agents.NewPostBody, null,
+            text => _viewModel.Agents.NewPostBody = text);
     }
 
     // ── Edit Messages (Feature 6) ───────────────────────────────────

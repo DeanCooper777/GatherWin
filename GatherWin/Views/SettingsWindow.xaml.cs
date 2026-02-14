@@ -17,6 +17,15 @@ public partial class SettingsWindow : Window
     public int MaxAgents { get; private set; } = 50;
     public int MaxSkills { get; private set; } = 50;
 
+    // Channels tab
+    public int MaxChannelsTab { get; private set; } = 50;
+
+    // Agents tab
+    public int MaxAgentsTab { get; private set; } = 50;
+
+    // Post display
+    public bool ShowFullPosts { get; private set; }
+
     // Appearance
     public int FontScalePercent { get; private set; } = 100;
 
@@ -48,6 +57,15 @@ public partial class SettingsWindow : Window
         MaxPlatformBox.Text = whatsNewOptions.MaxPlatformPosts.ToString();
         MaxAgentsBox.Text = whatsNewOptions.MaxAgents.ToString();
         MaxSkillsBox.Text = whatsNewOptions.MaxSkills.ToString();
+
+        // Channels tab
+        MaxChannelsTabBox.Text = whatsNewOptions.MaxChannelsTab.ToString();
+
+        // Agents tab
+        MaxAgentsTabBox.Text = whatsNewOptions.MaxAgentsTab.ToString();
+
+        // Post display
+        ShowFullPostsBox.IsChecked = whatsNewOptions.ShowFullPosts;
 
         // Appearance — set slider value (triggers ValueChanged to update label)
         FontScaleSlider.Value = whatsNewOptions.FontScalePercent;
@@ -84,6 +102,15 @@ public partial class SettingsWindow : Window
         MaxPlatformPosts = int.TryParse(MaxPlatformBox.Text, out var mp) ? mp : 20;
         MaxAgents = int.TryParse(MaxAgentsBox.Text, out var ma) ? ma : 50;
         MaxSkills = int.TryParse(MaxSkillsBox.Text, out var ms) ? ms : 50;
+
+        // Channels tab
+        MaxChannelsTab = int.TryParse(MaxChannelsTabBox.Text, out var mct) ? mct : 50;
+
+        // Agents tab
+        MaxAgentsTab = int.TryParse(MaxAgentsTabBox.Text, out var mat) ? mat : 50;
+
+        // Post display
+        ShowFullPosts = ShowFullPostsBox.IsChecked == true;
 
         // Appearance
         FontScalePercent = (int)FontScaleSlider.Value;
