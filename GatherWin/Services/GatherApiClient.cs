@@ -124,7 +124,7 @@ public class GatherApiClient
     {
         var url = "/api/posts?limit=50";
         if (since.HasValue)
-            url += $"&since={since.Value.UtcDateTime:yyyy-MM-dd HH:mm:ss}";
+            url += $"&since={since.Value.UtcDateTime:O}";
         var response = await AuthenticatedGetAsync(url, ct);
         if (response is null || !response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
@@ -237,7 +237,72 @@ public class GatherApiClient
             return await PostWithPoWAsync($"/api/posts/{postId}/comments", payload, "comment", ct);
 
         var error = await response.Content.ReadAsStringAsync(ct);
+        AppLogger.LogError($"API: POST /api/posts/{postId}/comments failed → HTTP {(int)response.StatusCode}: {error}");
         return (false, $"HTTP {(int)response.StatusCode}: {error}");
+    }
+
+    /// <summary>Creates a new post on the Gather feed. Returns the post ID on success.</summary>
+    public async Task<(bool Success, string? PostId, string? Error)> CreatePostAsync(
+        string title, string body, List<string> tags, CancellationToken ct)
+    {
+        try
+        {
+            // Posts always require PoW — get challenge first
+            AppLogger.Log("API", "Getting PoW challenge for post creation...");
+            var challengePayload = new Dictionary<string, string> { ["purpose"] = "post" };
+            var challengeResp = await AuthenticatedPostAsync("/api/pow/challenge", challengePayload, ct);
+            if (challengeResp is null || !challengeResp.IsSuccessStatusCode)
+                return (false, null, "Failed to get PoW challenge");
+
+            var challengeBody = await challengeResp.Content.ReadAsStringAsync(ct);
+            using var doc = JsonDocument.Parse(challengeBody);
+            var challenge = doc.RootElement.GetProperty("challenge").GetString()!;
+            var difficulty = doc.RootElement.GetProperty("difficulty").GetInt32();
+
+            AppLogger.Log("API", $"Solving PoW (difficulty={difficulty})...");
+            var (_, nonce) = ProofOfWorkSolver.Solve(challenge, difficulty);
+            AppLogger.Log("API", "PoW solved, creating post...");
+
+            // summary is required — use truncated body
+            var summary = body.Length <= 280 ? body : body[..277] + "...";
+
+            var payload = new Dictionary<string, object>
+            {
+                ["title"] = title,
+                ["body"] = body,
+                ["summary"] = summary,
+                ["tags"] = tags,
+                ["pow_challenge"] = challenge,
+                ["pow_nonce"] = nonce
+            };
+            var response = await AuthenticatedPostAsync("/api/posts", payload, ct);
+
+            if (response is null)
+                return (false, null, "Network error");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseBody = await response.Content.ReadAsStringAsync(ct);
+                try
+                {
+                    var post = JsonSerializer.Deserialize<GatherPost>(responseBody, _jsonOpts);
+                    return (true, post?.Id, null);
+                }
+                catch
+                {
+                    return (true, null, null); // Created but couldn't parse response
+                }
+            }
+
+            var error = await response.Content.ReadAsStringAsync(ct);
+            AppLogger.LogError($"API: POST /api/posts failed → HTTP {(int)response.StatusCode}: {error}");
+            return (false, null, $"HTTP {(int)response.StatusCode}: {error}");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            return (false, null, $"Error creating post: {ex.Message}");
+        }
     }
 
     /// <summary>Creates a new channel. Returns the channel ID on success.</summary>
@@ -265,6 +330,7 @@ public class GatherApiClient
         }
 
         var error = await response.Content.ReadAsStringAsync(ct);
+        AppLogger.LogError($"API: POST /api/channels failed → HTTP {(int)response.StatusCode}: {error}");
         return (false, null, $"HTTP {(int)response.StatusCode}: {error}");
     }
 
@@ -285,6 +351,7 @@ public class GatherApiClient
             return await PostWithPoWAsync($"/api/channels/{channelId}/messages", payload, "comment", ct);
 
         var error = await response.Content.ReadAsStringAsync(ct);
+        AppLogger.LogError($"API: POST /api/channels/{channelId}/messages failed → HTTP {(int)response.StatusCode}: {error}");
         return (false, $"HTTP {(int)response.StatusCode}: {error}");
     }
 

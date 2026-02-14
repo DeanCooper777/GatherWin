@@ -60,7 +60,7 @@ public partial class MainViewModel : ObservableObject
         Account = new AccountViewModel();
         Comments = new CommentsViewModel(api);
         Inbox = new InboxViewModel();
-        Feed = new FeedViewModel();
+        Feed = new FeedViewModel(api);
         Channels = new ChannelsViewModel(api);
         WhatsNew = new WhatsNewViewModel(api, keysDirectory);
 
