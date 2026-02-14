@@ -26,10 +26,11 @@
         <!-- What's New card template -->
         <DataTemplate x:Key="WhatsNewCardTemplate" DataType="{x:Type vm:WhatsNewEntry}">
             <Border Margin="0,0,0,4" Padding="10,8"
-                    CornerRadius="4"
+                    CornerRadius="4" Cursor="Hand"
                     Background="{Binding Category, Converter={StaticResource CategoryToBrush}}"
                     BorderBrush="{Binding Category, Converter={StaticResource CategoryToBrush}, ConverterParameter=border}"
-                    BorderThickness="1,1,1,1">
+                    BorderThickness="1,1,1,1"
+                    MouseLeftButtonUp="WhatsNewCard_MouseLeftButtonUp">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -37,39 +38,37 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Header row: click to expand/collapse -->
-                    <Border Grid.Row="0" Background="Transparent" Cursor="Hand"
-                            MouseLeftButtonUp="WhatsNewCard_MouseLeftButtonUp">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                <TextBlock Text="{Binding Category}" FontWeight="SemiBold" FontSize="11"
-                                           Foreground="#555" Margin="0,0,8,0"/>
-                                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="#333"
-                                           TextTrimming="CharacterEllipsis" MaxWidth="500"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Border Background="#E74C3C" CornerRadius="4" Padding="4,1" Margin="0,0,6,0"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding IsNew, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Text="NEW" Foreground="White" FontSize="9" FontWeight="Bold"/>
-                                </Border>
-                                <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
-                                           FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                    <!-- Header row -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <TextBlock Text="{Binding Category}" FontWeight="SemiBold" FontSize="11"
+                                       Foreground="#555" Margin="0,0,8,0"/>
+                            <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="#333"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="500"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Border Background="#E74C3C" CornerRadius="4" Padding="4,1" Margin="0,0,6,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IsNew, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="NEW" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
+                                       FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
 
-                    <!-- Description — selectable text -->
+                    <!-- Description — selectable text when expanded, click-through when collapsed -->
                     <TextBox Grid.Row="1"
                              Text="{Binding Description, Mode=OneWay}" TextWrapping="Wrap"
                              IsReadOnly="True" IsReadOnlyCaretVisible="True"
                              BorderThickness="0" Background="Transparent" Padding="0"
                              FontSize="12" Foreground="#444" Margin="0,4,0,0"
                              Cursor="IBeam" Focusable="True"
+                             IsHitTestVisible="{Binding IsExpanded}"
                              VerticalScrollBarVisibility="Disabled">
                         <TextBox.Style>
                             <Style TargetType="TextBox">
@@ -87,6 +86,7 @@
                     <TextBlock Grid.Row="2"
                                Text="{Binding Detail}" TextWrapping="Wrap"
                                FontSize="10" Foreground="#777" Margin="0,2,0,0"
+                               IsHitTestVisible="False"
                                Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}"/>
                 </Grid>
             </Border>
@@ -95,71 +95,65 @@
         <!-- Activity card template — shared across all tabs -->
         <DataTemplate x:Key="ActivityCardTemplate" DataType="{x:Type models:ActivityItem}">
             <Border Margin="0,0,0,4" Padding="10,8"
-                    CornerRadius="4"
+                    CornerRadius="4" Cursor="Hand"
                     Background="{Binding Type, Converter={StaticResource StreamToBg}}"
                     BorderBrush="{Binding Type, Converter={StaticResource StreamToBorder}}"
-                    BorderThickness="1,1,1,1">
+                    BorderThickness="1,1,1,1"
+                    MouseLeftButtonUp="ActivityCard_MouseLeftButtonUp">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
 
-                    <!-- Header row: click to expand/collapse -->
-                    <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
-                            Background="Transparent" Cursor="Hand"
-                            MouseLeftButtonUp="ActivityCard_MouseLeftButtonUp">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <!-- Header: Type + Title + Author -->
-                            <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                <TextBlock FontWeight="SemiBold" FontSize="12" Margin="0,0,6,0">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="POST"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ActivityType.Comment}">
-                                                    <Setter Property="Text" Value="COMMENT"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ActivityType.Inbox}">
-                                                    <Setter Property="Text" Value="INBOX"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ActivityType.FeedPost}">
-                                                    <Setter Property="Text" Value="POST"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ActivityType.Channel}">
-                                                    <Setter Property="Text" Value="CHANNEL"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                                <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#555"
-                                           TextTrimming="CharacterEllipsis" MaxWidth="400"/>
-                                <TextBlock Text=" — " Foreground="#999" FontSize="11"
-                                           Visibility="{Binding Author, Converter={StaticResource NotNullToVis}}"/>
-                                <TextBlock Text="{Binding Author}" FontSize="11" Foreground="#777"/>
-                            </StackPanel>
-                            <!-- Timestamp -->
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
-                                       FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
+                    <!-- Header row -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- Header: Type + Title + Author -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <TextBlock FontWeight="SemiBold" FontSize="12" Margin="0,0,6,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="POST"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ActivityType.Comment}">
+                                                <Setter Property="Text" Value="COMMENT"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ActivityType.Inbox}">
+                                                <Setter Property="Text" Value="INBOX"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ActivityType.FeedPost}">
+                                                <Setter Property="Text" Value="POST"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Type}" Value="{x:Static models:ActivityType.Channel}">
+                                                <Setter Property="Text" Value="CHANNEL"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#555"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="400"/>
+                            <TextBlock Text=" — " Foreground="#999" FontSize="11"
+                                       Visibility="{Binding Author, Converter={StaticResource NotNullToVis}}"/>
+                            <TextBlock Text="{Binding Author}" FontSize="11" Foreground="#777"/>
+                        </StackPanel>
+                        <!-- Timestamp -->
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
+                                   FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
+                    </Grid>
 
-                    <!-- Body — selectable text (drag to select, Ctrl-C to copy) -->
-                    <TextBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                    <!-- Body — selectable text when expanded, click-through when collapsed -->
+                    <TextBox Grid.Row="1"
                              TextWrapping="Wrap" IsReadOnly="True" IsReadOnlyCaretVisible="True"
                              BorderThickness="0" Background="Transparent" Padding="0"
                              FontSize="12" Foreground="#333" Margin="0,4,0,0"
                              Cursor="IBeam" Focusable="True"
+                             IsHitTestVisible="{Binding IsExpanded}"
                              VerticalScrollBarVisibility="Disabled">
                         <TextBox.Style>
                             <Style TargetType="TextBox">
@@ -185,47 +179,46 @@
         <!-- Inbox card template — like ActivityCardTemplate but click navigates to referenced post -->
         <DataTemplate x:Key="InboxCardTemplate" DataType="{x:Type models:ActivityItem}">
             <Border Margin="0,0,0,4" Padding="10,8"
-                    CornerRadius="4"
+                    CornerRadius="4" Cursor="Hand"
                     Background="{Binding Type, Converter={StaticResource StreamToBg}}"
                     BorderBrush="{Binding Type, Converter={StaticResource StreamToBorder}}"
-                    BorderThickness="1,1,1,1">
+                    BorderThickness="1,1,1,1"
+                    MouseLeftButtonUp="InboxCard_MouseLeftButtonUp">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Header row: click navigates to post (if available), otherwise toggles expand -->
-                    <Border Grid.Row="0" Background="Transparent" Cursor="Hand"
-                            MouseLeftButtonUp="InboxCard_MouseLeftButtonUp">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="INBOX" FontWeight="SemiBold" FontSize="12" Margin="0,0,6,0"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#555"
-                                           TextTrimming="CharacterEllipsis" MaxWidth="400"/>
-                                <!-- Navigate indicator when post is referenced -->
-                                <TextBlock Text=" →" FontSize="12" Foreground="#3498DB" FontWeight="Bold"
-                                           VerticalAlignment="Center" Margin="4,0,0,0"
-                                           ToolTip="Click to view referenced post"
-                                           Visibility="{Binding PostId, Converter={StaticResource NotNullToVis}}"/>
-                            </StackPanel>
-                            <TextBlock Grid.Column="2"
-                                       Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
-                                       FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
+                    <!-- Header row -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="INBOX" FontWeight="SemiBold" FontSize="12" Margin="0,0,6,0"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#555"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="400"/>
+                            <!-- Navigate indicator when post is referenced -->
+                            <TextBlock Text=" →" FontSize="12" Foreground="#3498DB" FontWeight="Bold"
+                                       VerticalAlignment="Center" Margin="4,0,0,0"
+                                       ToolTip="Click to view referenced post"
+                                       Visibility="{Binding PostId, Converter={StaticResource NotNullToVis}}"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
+                                   FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
+                    </Grid>
 
-                    <!-- Body — selectable text -->
+                    <!-- Body — selectable text when expanded, click-through when collapsed -->
                     <TextBox Grid.Row="1"
                              TextWrapping="Wrap" IsReadOnly="True" IsReadOnlyCaretVisible="True"
                              BorderThickness="0" Background="Transparent" Padding="0"
                              FontSize="12" Foreground="#333" Margin="0,4,0,0"
                              Cursor="IBeam" Focusable="True"
+                             IsHitTestVisible="{Binding IsExpanded}"
                              VerticalScrollBarVisibility="Disabled">
                         <TextBox.Style>
                             <Style TargetType="TextBox">
@@ -706,7 +699,7 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Post body (click to expand/collapse, text is selectable) -->
+                            <!-- Post body (click to expand/collapse, text is selectable when expanded) -->
                             <Border Grid.Row="1" Background="#FAFAFA" Padding="10,8" Margin="4,4,0,0"
                                     BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="4"
                                     MouseLeftButtonUp="PostBody_MouseLeftButtonUp" Cursor="Hand">
@@ -714,7 +707,8 @@
                                          IsReadOnly="True" IsReadOnlyCaretVisible="True"
                                          BorderThickness="0" Background="Transparent" Padding="0"
                                          FontSize="12" Foreground="#333" Cursor="IBeam"
-                                         Focusable="True" VerticalScrollBarVisibility="Disabled">
+                                         Focusable="True" VerticalScrollBarVisibility="Disabled"
+                                         IsHitTestVisible="{Binding WhatsNew.IsPostBodyExpanded}">
                                     <TextBox.Style>
                                         <Style TargetType="TextBox">
                                             <Setter Property="MaxHeight" Value="120"/>
@@ -733,8 +727,9 @@
                                 <ItemsControl ItemsSource="{Binding WhatsNew.DiscussionComments}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:DiscussionComment}">
-                                            <Border Padding="8,6" CornerRadius="4"
-                                                    Margin="{Binding IndentLevel, Converter={StaticResource IndentToMargin}}">
+                                            <Border Padding="8,6" CornerRadius="4" Cursor="Hand"
+                                                    Margin="{Binding IndentLevel, Converter={StaticResource IndentToMargin}}"
+                                                    MouseLeftButtonUp="DiscussionComment_MouseLeftButtonUp">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Setter Property="Background" Value="#F5F5F5"/>
@@ -753,34 +748,32 @@
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
                                                     </Grid.RowDefinitions>
-                                                    <!-- Header: click to expand/collapse -->
-                                                    <Border Grid.Row="0" Background="Transparent" Cursor="Hand"
-                                                            MouseLeftButtonUp="DiscussionComment_MouseLeftButtonUp">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                            </Grid.ColumnDefinitions>
-                                                            <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                                                <TextBlock Text="{Binding Author}" FontWeight="SemiBold"
-                                                                           FontSize="11" Foreground="#1565C0" Margin="0,0,8,0"/>
-                                                                <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
-                                                                           FontSize="10" Foreground="#999"/>
-                                                            </StackPanel>
-                                                            <!-- Reply to this comment button -->
-                                                            <Button Grid.Column="1" Content="Reply"
-                                                                    Click="ReplyToComment_Click"
-                                                                    FontSize="9" Padding="6,1"
-                                                                    Background="Transparent" Foreground="#3498DB"
-                                                                    BorderBrush="#3498DB" BorderThickness="1"
-                                                                    Cursor="Hand" VerticalAlignment="Center"/>
-                                                        </Grid>
-                                                    </Border>
+                                                    <!-- Header -->
+                                                    <Grid Grid.Row="0">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding Author}" FontWeight="SemiBold"
+                                                                       FontSize="11" Foreground="#1565C0" Margin="0,0,8,0"/>
+                                                            <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
+                                                                       FontSize="10" Foreground="#999"/>
+                                                        </StackPanel>
+                                                        <!-- Reply to this comment button -->
+                                                        <Button Grid.Column="1" Content="Reply"
+                                                                Click="ReplyToComment_Click"
+                                                                FontSize="9" Padding="6,1"
+                                                                Background="Transparent" Foreground="#3498DB"
+                                                                BorderBrush="#3498DB" BorderThickness="1"
+                                                                Cursor="Hand" VerticalAlignment="Center"/>
+                                                    </Grid>
                                                     <TextBox Grid.Row="1" TextWrapping="Wrap"
                                                              IsReadOnly="True" IsReadOnlyCaretVisible="True"
                                                              BorderThickness="0" Background="Transparent" Padding="0"
                                                              FontSize="12" Foreground="#333" Margin="0,2,0,0"
                                                              Cursor="IBeam" Focusable="True"
+                                                             IsHitTestVisible="{Binding IsExpanded}"
                                                              VerticalScrollBarVisibility="Disabled">
                                                         <TextBox.Text>
                                                             <MultiBinding Converter="{StaticResource AuthorBodyFormatter}">

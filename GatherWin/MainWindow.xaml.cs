@@ -72,9 +72,17 @@ public partial class MainWindow : Window
 
     private void WhatsNewList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is ListBox lb && lb.SelectedItem is WhatsNewEntry entry && entry.HasPost)
+        if (sender is ListBox lb && lb.SelectedItem is WhatsNewEntry entry)
         {
-            _ = _viewModel.WhatsNew.LoadDiscussionAsync(entry, CancellationToken.None);
+            if (entry.HasPost)
+            {
+                _ = _viewModel.WhatsNew.LoadDiscussionAsync(entry, CancellationToken.None);
+            }
+            else
+            {
+                // Non-post items don't have discussions — close any open panel
+                _viewModel.WhatsNew.CloseDiscussion();
+            }
         }
     }
 
