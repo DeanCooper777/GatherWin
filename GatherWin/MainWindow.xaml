@@ -24,6 +24,8 @@
         <converters:WhatsNewCategoryToBrushConverter x:Key="CategoryToBrush"/>
         <converters:IndentToMarginConverter x:Key="IndentToMargin"/>
         <converters:IsCurrentUserToVisibilityConverter x:Key="IsCurrentUserToVis"/>
+        <converters:CharCountConverter x:Key="CharCount"/>
+        <converters:CharCountBrushConverter x:Key="CharCountBrush"/>
 
         <!-- What's New card template -->
         <DataTemplate x:Key="WhatsNewCardTemplate" DataType="{x:Type vm:WhatsNewEntry}">
@@ -677,8 +679,12 @@
 
                                 <StackPanel Grid.Row="2" Orientation="Horizontal"
                                             HorizontalAlignment="Right" Margin="0,6,0,0">
+                                    <TextBlock Text="{Binding Comments.DiscussionReplyText, Converter={StaticResource CharCount}}"
+                                               Foreground="{Binding Comments.DiscussionReplyText, Converter={StaticResource CharCountBrush}}"
+                                               FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="{Binding Comments.DiscussionSendError}" Foreground="#E74C3C"
                                                FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               TextWrapping="Wrap" MaxWidth="300"
                                                Visibility="{Binding Comments.DiscussionSendError, Converter={StaticResource NotNullToVis}}"/>
                                     <TextBlock Text="Sending..." FontStyle="Italic" Foreground="#3498DB"
                                                FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
@@ -1005,8 +1011,12 @@
 
                                 <StackPanel Grid.Row="2" Orientation="Horizontal"
                                             HorizontalAlignment="Right" Margin="0,6,0,0">
+                                    <TextBlock Text="{Binding Feed.DiscussionReplyText, Converter={StaticResource CharCount}}"
+                                               Foreground="{Binding Feed.DiscussionReplyText, Converter={StaticResource CharCountBrush}}"
+                                               FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="{Binding Feed.DiscussionSendError}" Foreground="#E74C3C"
                                                FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               TextWrapping="Wrap" MaxWidth="300"
                                                Visibility="{Binding Feed.DiscussionSendError, Converter={StaticResource NotNullToVis}}"/>
                                     <TextBlock Text="Sending..." FontStyle="Italic" Foreground="#3498DB"
                                                FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
@@ -1247,8 +1257,12 @@
                                 </Grid>
 
                                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                                    <TextBlock Text="{Binding Channels.ReplyText, Converter={StaticResource CharCount}}"
+                                               Foreground="{Binding Channels.ReplyText, Converter={StaticResource CharCountBrush}}"
+                                               FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="{Binding Channels.SendError}" Foreground="#E74C3C"
                                                FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               TextWrapping="Wrap" MaxWidth="300"
                                                Visibility="{Binding Channels.SendError, Converter={StaticResource NotNullToVis}}"/>
                                     <TextBlock Text="Sending..." FontStyle="Italic" Foreground="#3498DB"
                                                FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
@@ -1727,8 +1741,12 @@
 
                                     <StackPanel Grid.Row="2" Orientation="Horizontal"
                                                 HorizontalAlignment="Right" Margin="0,6,0,0">
+                                        <TextBlock Text="{Binding WhatsNew.ReplyText, Converter={StaticResource CharCount}}"
+                                                   Foreground="{Binding WhatsNew.ReplyText, Converter={StaticResource CharCountBrush}}"
+                                                   FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <TextBlock Text="{Binding WhatsNew.SendError}" Foreground="#E74C3C"
                                                    FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                   TextWrapping="Wrap" MaxWidth="300"
                                                    Visibility="{Binding WhatsNew.SendError, Converter={StaticResource NotNullToVis}}"/>
                                         <TextBlock Text="Sending..." FontStyle="Italic" Foreground="#3498DB"
                                                    FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"

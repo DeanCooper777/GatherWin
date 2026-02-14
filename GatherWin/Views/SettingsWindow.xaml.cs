@@ -25,6 +25,7 @@ public partial class SettingsWindow : Window
 
     // Post display
     public bool ShowFullPosts { get; private set; }
+    public int MaxCommentLength { get; private set; } = 2000;
 
     // Appearance
     public int FontScalePercent { get; private set; } = 100;
@@ -66,6 +67,7 @@ public partial class SettingsWindow : Window
 
         // Post display
         ShowFullPostsBox.IsChecked = whatsNewOptions.ShowFullPosts;
+        MaxCommentLengthBox.Text = whatsNewOptions.MaxCommentLength.ToString();
 
         // Appearance — set slider value (triggers ValueChanged to update label)
         FontScaleSlider.Value = whatsNewOptions.FontScalePercent;
@@ -111,6 +113,7 @@ public partial class SettingsWindow : Window
 
         // Post display
         ShowFullPosts = ShowFullPostsBox.IsChecked == true;
+        MaxCommentLength = int.TryParse(MaxCommentLengthBox.Text, out var mcl) && mcl > 0 ? mcl : 10000;
 
         // Appearance
         FontScalePercent = (int)FontScaleSlider.Value;

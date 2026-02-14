@@ -57,6 +57,13 @@ public class WhatsNewOptions
     /// Uses more API tokens but shows complete post content everywhere.
     /// </summary>
     public bool ShowFullPosts { get; set; }
+
+    // ── Compose limits ──────────────────────────────────────────────
+    /// <summary>
+    /// Maximum character length for comments and channel messages.
+    /// The Gather API enforces a server-side limit of 2,000 characters.
+    /// </summary>
+    public int MaxCommentLength { get; set; } = 2000;
 }
 
 public partial class WhatsNewViewModel : ObservableObject
@@ -473,6 +480,12 @@ public partial class WhatsNewViewModel : ObservableObject
     {
         if (string.IsNullOrEmpty(DiscussionPostId) || string.IsNullOrWhiteSpace(ReplyText))
             return;
+
+        if (ReplyText.Trim().Length > Converters.CharLimitSettings.MaxLength)
+        {
+            SendError = $"Comment exceeds {Converters.CharLimitSettings.MaxLength:N0} character limit ({ReplyText.Trim().Length:N0} chars). Please shorten your message.";
+            return;
+        }
 
         IsSendingReply = true;
         SendError = null;

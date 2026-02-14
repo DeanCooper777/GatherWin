@@ -275,6 +275,12 @@ public partial class FeedViewModel : ObservableObject
         if (string.IsNullOrEmpty(DiscussionPostId) || string.IsNullOrWhiteSpace(DiscussionReplyText))
             return;
 
+        if (DiscussionReplyText.Trim().Length > Converters.CharLimitSettings.MaxLength)
+        {
+            DiscussionSendError = $"Comment exceeds {Converters.CharLimitSettings.MaxLength:N0} character limit ({DiscussionReplyText.Trim().Length:N0} chars). Please shorten your message.";
+            return;
+        }
+
         IsSendingDiscussionReply = true;
         DiscussionSendError = null;
 

@@ -38,6 +38,31 @@ public class PollingService
 
     public bool IsRunning => _pollingTask is not null && !_pollingTask.IsCompleted;
 
+    /// <summary>When true, the first poll skips the channel fetch (already loaded by ChannelsViewModel).</summary>
+    public bool SkipInitialChannelFetch { get; set; }
+
+    /// <summary>When true, the first poll skips the feed fetch (already pre-loaded by MainViewModel).</summary>
+    public bool SkipInitialFeedFetch { get; set; }
+
+    /// <summary>Seed the seen-feed-post-IDs set so pre-loaded posts aren't duplicated.</summary>
+    public void SeedFeedPostIds(IEnumerable<string> ids)
+    {
+        foreach (var id in ids)
+            _seenFeedPostIds.Add(id);
+    }
+
+    /// <summary>Seed the seen-channel-message-IDs so pre-loaded messages aren't duplicated.</summary>
+    public void SeedChannelMessageIds(string channelId, IEnumerable<string> ids)
+    {
+        if (!_seenChannelMessageIds.TryGetValue(channelId, out var set))
+        {
+            set = new HashSet<string>();
+            _seenChannelMessageIds[channelId] = set;
+        }
+        foreach (var id in ids)
+            set.Add(id);
+    }
+
     public PollingService(GatherApiClient api, string agentId, string[] watchedPostIds, int intervalSeconds)
     {
         _api = api;
@@ -244,20 +269,30 @@ public class PollingService
 
         if (_isFirstRun)
         {
-            AppLogger.Log("Poll", $"Seeding {posts.Count} feed posts");
-            foreach (var p in posts)
+            if (SkipInitialFeedFetch)
             {
-                if (p.Id is not null) _seenFeedPostIds.Add(p.Id);
-
-                NewFeedPostReceived?.Invoke(this, new FeedPostEventArgs
+                // Feed was pre-loaded by MainViewModel — just seed IDs we don't already have
+                AppLogger.Log("Poll", $"Skipping feed seed (pre-loaded), syncing {posts.Count} IDs");
+                foreach (var p in posts)
+                    if (p.Id is not null) _seenFeedPostIds.Add(p.Id);
+            }
+            else
+            {
+                AppLogger.Log("Poll", $"Seeding {posts.Count} feed posts");
+                foreach (var p in posts)
                 {
-                    PostId = p.Id ?? "",
-                    Author = p.Author ?? "unknown",
-                    Title = p.Title ?? p.Summary ?? "(no title)",
-                    Body = p.Body ?? p.Summary ?? "",
-                    Timestamp = ParseTimestamp(p.Created),
-                    IsInitialLoad = true
-                });
+                    if (p.Id is not null) _seenFeedPostIds.Add(p.Id);
+
+                    NewFeedPostReceived?.Invoke(this, new FeedPostEventArgs
+                    {
+                        PostId = p.Id ?? "",
+                        Author = p.Author ?? "unknown",
+                        Title = p.Title ?? p.Summary ?? "(no title)",
+                        Body = p.Body ?? p.Summary ?? "",
+                        Timestamp = ParseTimestamp(p.Created),
+                        IsInitialLoad = true
+                    });
+                }
             }
             _feedSinceTimestamp = DateTimeOffset.UtcNow;
             return;
@@ -294,6 +329,12 @@ public class PollingService
 
     private async Task CheckChannelsAsync(CancellationToken ct)
     {
+        if (_isFirstRun && SkipInitialChannelFetch)
+        {
+            AppLogger.Log("Poll", "Skipping initial channel fetch (pre-loaded by ChannelsViewModel)");
+            return;
+        }
+
         var channelList = await _api.GetChannelsAsync(ct);
         if (channelList is null) return;
 

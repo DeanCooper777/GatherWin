@@ -314,7 +314,7 @@ public class GatherApiClient
 
         var error = await response.Content.ReadAsStringAsync(ct);
         AppLogger.LogError($"API: POST /api/posts/{postId}/comments failed → HTTP {(int)response.StatusCode}: {error}");
-        return (false, $"HTTP {(int)response.StatusCode}: {error}");
+        return (false, ParseApiError(error, (int)response.StatusCode));
     }
 
     /// <summary>Creates a new post on the Gather feed. Returns the post ID on success.</summary>
@@ -373,7 +373,7 @@ public class GatherApiClient
 
             var error = await response.Content.ReadAsStringAsync(ct);
             AppLogger.LogError($"API: POST /api/posts failed → HTTP {(int)response.StatusCode}: {error}");
-            return (false, null, $"HTTP {(int)response.StatusCode}: {error}");
+            return (false, null, ParseApiError(error, (int)response.StatusCode));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -409,7 +409,7 @@ public class GatherApiClient
 
         var error = await response.Content.ReadAsStringAsync(ct);
         AppLogger.LogError($"API: POST /api/channels failed → HTTP {(int)response.StatusCode}: {error}");
-        return (false, null, $"HTTP {(int)response.StatusCode}: {error}");
+        return (false, null, ParseApiError(error, (int)response.StatusCode));
     }
 
     /// <summary>Posts a message to a Gather channel. Returns true on success.</summary>
@@ -432,7 +432,7 @@ public class GatherApiClient
 
         var error = await response.Content.ReadAsStringAsync(ct);
         AppLogger.LogError($"API: POST /api/channels/{channelId}/messages failed → HTTP {(int)response.StatusCode}: {error}");
-        return (false, $"HTTP {(int)response.StatusCode}: {error}");
+        return (false, ParseApiError(error, (int)response.StatusCode));
     }
 
     private async Task<(bool Success, string? Error)> PostWithPoWAsync(
@@ -476,11 +476,53 @@ public class GatherApiClient
                 return (true, null);
 
             var error = await response.Content.ReadAsStringAsync(ct);
-            return (false, $"HTTP {(int)response.StatusCode}: {error}");
+            return (false, ParseApiError(error, (int)response.StatusCode));
         }
         catch (Exception ex)
         {
             return (false, $"PoW error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Extracts a human-readable error message from the Gather API's JSON error response.
+    /// Falls back to a generic "HTTP {status}" message if parsing fails.
+    /// </summary>
+    private static string ParseApiError(string responseBody, int statusCode)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+
+            // Try to extract validation error messages: { "errors": [{ "message": "..." }] }
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+            {
+                var messages = new List<string>();
+                foreach (var err in errors.EnumerateArray())
+                {
+                    if (err.TryGetProperty("message", out var msg))
+                        messages.Add(msg.GetString() ?? "");
+                }
+                if (messages.Count > 0)
+                    return string.Join("; ", messages);
+            }
+
+            // Try "detail" field
+            if (root.TryGetProperty("detail", out var detail))
+                return detail.GetString() ?? $"HTTP {statusCode}";
+
+            // Try "title" field
+            if (root.TryGetProperty("title", out var title))
+                return title.GetString() ?? $"HTTP {statusCode}";
+        }
+        catch
+        {
+            // Not valid JSON — return raw body (truncated)
+        }
+
+        return responseBody.Length > 200
+            ? $"HTTP {statusCode}: {responseBody[..200]}..."
+            : $"HTTP {statusCode}: {responseBody}";
     }
 }

@@ -99,6 +99,7 @@ public partial class MainViewModel : ObservableObject
 
         // Apply saved post display preference
         _api.ShowFullPosts = WhatsNew.Options.ShowFullPosts;
+        Converters.CharLimitSettings.MaxLength = WhatsNew.Options.MaxCommentLength;
 
         // Wire subscribe/unsubscribe callbacks
         Feed.SubscribeRequested = postId => _ = SubscribeToPostAsync(postId);
@@ -278,14 +279,59 @@ public partial class MainViewModel : ObservableObject
             AppLogger.Log("VM", $"Loading stats for {_watchedPostIds.Length} watched posts...");
             await LoadWatchedPostStatsAsync(ct);
 
+            // Pre-load feed posts so the Feed tab has content immediately
+            AppLogger.Log("VM", "Pre-loading feed posts...");
+            try
+            {
+                var feed = await _api.GetFeedPostsAsync(DateTimeOffset.UtcNow.AddDays(-7), ct);
+                if (feed?.Posts is not null)
+                {
+                    foreach (var p in feed.Posts)
+                    {
+                        Feed.AddPost(p.Id ?? "", p.Author ?? "unknown",
+                            p.Title ?? p.Summary ?? "(untitled)",
+                            p.Body ?? p.Summary ?? "",
+                            ParseTimestamp(p.Created), isNew: false);
+                        AddToAllActivity(new ActivityItem
+                        {
+                            Type = ActivityType.FeedPost,
+                            Id = p.Id ?? "",
+                            Title = p.Title ?? p.Summary ?? "(untitled)",
+                            Author = p.Author ?? "unknown",
+                            Body = p.Body ?? p.Summary ?? "",
+                            Timestamp = ParseTimestamp(p.Created),
+                            IsNew = false
+                        });
+                    }
+                    AppLogger.Log("VM", $"Pre-loaded {feed.Posts.Count} feed posts");
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                AppLogger.LogError("VM: Failed to pre-load feed", ex);
+            }
+
             // Load all channels for the Channels tab
             AppLogger.Log("VM", "Loading all channels...");
             await Channels.LoadAllChannelsAsync(ct);
 
-            // Start polling
+            // Start polling — tell it to skip initial feed/channel fetch (already loaded above)
             AppLogger.Log("VM", "Starting polling service...");
             _pollCts = new CancellationTokenSource();
             _polling = new PollingService(_api, _agentId, _watchedPostIds, _pollIntervalSeconds);
+            _polling.SkipInitialChannelFetch = true;
+            _polling.SkipInitialFeedFetch = true;
+
+            // Seed polling service with pre-loaded IDs to avoid duplicates
+            foreach (var post in Feed.Posts)
+                if (!string.IsNullOrEmpty(post.Id))
+                    _polling.SeedFeedPostIds(new[] { post.Id });
+
+            foreach (var ch in Channels.Channels)
+                _polling.SeedChannelMessageIds(ch.Id,
+                    ch.Messages.Select(m => m.Id).Where(id => !string.IsNullOrEmpty(id)));
+
             WirePollingEvents(_polling);
             await _polling.StartAsync(_pollCts.Token);
 
@@ -542,6 +588,13 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Insert item sorted by Timestamp descending (newest first).</summary>
+    private static DateTimeOffset ParseTimestamp(string? ts)
+    {
+        if (ts is not null && DateTimeOffset.TryParse(ts, out var dto))
+            return dto;
+        return DateTimeOffset.UtcNow;
+    }
+
     private static void InsertSorted(ObservableCollection<ActivityItem> list, ActivityItem item)
     {
         for (int i = 0; i < list.Count; i++)
@@ -854,6 +907,10 @@ public partial class MainViewModel : ObservableObject
             var fullPostsChanged = WhatsNew.Options.ShowFullPosts != dialog.ShowFullPosts;
             WhatsNew.Options.ShowFullPosts = dialog.ShowFullPosts;
             _api.ShowFullPosts = dialog.ShowFullPosts;
+
+            // Apply comment length limit
+            WhatsNew.Options.MaxCommentLength = dialog.MaxCommentLength;
+            Converters.CharLimitSettings.MaxLength = dialog.MaxCommentLength;
 
             // Refresh existing post bodies when the setting changes
             if (fullPostsChanged)

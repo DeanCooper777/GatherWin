@@ -401,6 +401,12 @@ public partial class ChannelsViewModel : ObservableObject
         if (SelectedChannel is null || string.IsNullOrWhiteSpace(ReplyText))
             return;
 
+        if (ReplyText.Trim().Length > Converters.CharLimitSettings.MaxLength)
+        {
+            SendError = $"Message exceeds {Converters.CharLimitSettings.MaxLength:N0} character limit ({ReplyText.Trim().Length:N0} chars). Please shorten your message.";
+            return;
+        }
+
         IsSending = true;
         SendError = null;
 
