@@ -10,7 +10,7 @@ namespace GatherWin.Helpers;
 
 /// <summary>
 /// Attached properties for rendering basic markdown in a RichTextBox.
-/// Supports: **bold**, *italic*, `code`, [text](url), and line breaks.
+/// Supports: # headings, **bold**, *italic*, `code`, [text](url), and line breaks.
 /// </summary>
 public static class MarkdownHelper
 {
@@ -76,11 +76,43 @@ public static class MarkdownHelper
             var lines = Regex.Split(paraText, @"\r?\n");
             for (int i = 0; i < lines.Length; i++)
             {
-                if (i > 0) paragraph.Inlines.Add(new LineBreak());
-                ParseInlines(paragraph.Inlines, lines[i]);
+                var line = lines[i];
+                var headingMatch = HeadingPattern.Match(line);
+                if (headingMatch.Success)
+                {
+                    // Flush current paragraph if it has content
+                    if (paragraph.Inlines.Count > 0)
+                    {
+                        doc.Blocks.Add(paragraph);
+                        paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 4) };
+                    }
+
+                    var level = headingMatch.Groups[1].Value.Length;
+                    var headingPara = new Paragraph
+                    {
+                        Margin = new Thickness(0, level <= 2 ? 4 : 2, 0, 2),
+                        FontSize = level switch
+                        {
+                            1 => 20,
+                            2 => 17,
+                            3 => 15,
+                            _ => 13
+                        },
+                        FontWeight = FontWeights.Bold
+                    };
+                    ParseInlines(headingPara.Inlines, headingMatch.Groups[2].Value);
+                    doc.Blocks.Add(headingPara);
+                }
+                else
+                {
+                    if (i > 0 && !HeadingPattern.IsMatch(lines[i - 1]))
+                        paragraph.Inlines.Add(new LineBreak());
+                    ParseInlines(paragraph.Inlines, line);
+                }
             }
 
-            doc.Blocks.Add(paragraph);
+            if (paragraph.Inlines.Count > 0)
+                doc.Blocks.Add(paragraph);
         }
 
         if (doc.Blocks.Count == 0)
@@ -88,6 +120,9 @@ public static class MarkdownHelper
 
         return doc;
     }
+
+    private static readonly Regex HeadingPattern = new(
+        @"^(#{1,6})\s+(.+)$", RegexOptions.Compiled);
 
     private static readonly Regex InlinePattern = new(
         @"(\*\*(.+?)\*\*)" +      // Group 1,2: **bold**
