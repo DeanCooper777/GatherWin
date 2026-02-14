@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using GatherWin.Services;
 using GatherWin.ViewModels;
+using GatherWin.Views;
 
 namespace GatherWin;
 
@@ -32,17 +34,30 @@ public partial class App : Application
             .Split(',', StringSplitOptions.RemoveEmptyEntries);
         var pollInterval = int.TryParse(gatherSection["PollIntervalSeconds"], out var pi) ? pi : 60;
         var keysDirectory = gatherSection["KeysDirectory"] ?? string.Empty;
+        var claudeApiKey = gatherSection["ClaudeApiKey"] ?? string.Empty;
+        var newBadgeDurationMinutes = int.TryParse(gatherSection["NewBadgeDurationMinutes"], out var nbdm) ? nbdm : 30;
 
         if (string.IsNullOrEmpty(agentId))
         {
-            MessageBox.Show(
-                "No Agent ID configured.\n\n" +
-                "Edit appsettings.json and set your Gather agent ID in the \"AgentId\" field, " +
-                "then restart the application.\n\n" +
-                "See README.md for setup instructions.",
-                "GatherWin — Setup Required",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            // Prevent WPF from shutting down when the setup dialog closes
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            var setup = new SetupWindow();
+            if (setup.ShowDialog() == true)
+            {
+                agentId = setup.AgentId;
+                claudeApiKey = setup.ClaudeApiKey;
+                SaveLocalSettings(agentId, string.Join(",", watchedPostIds), pollInterval,
+                    keysDirectory, claudeApiKey, newBadgeDurationMinutes);
+            }
+            else
+            {
+                Shutdown();
+                return;
+            }
+
+            // Restore normal shutdown mode for the main window
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
         }
 
         // Shared JSON options (snake_case for Gather API)
@@ -65,11 +80,14 @@ public partial class App : Application
 
         var authService = new GatherAuthService(httpClient, jsonOpts, keysDirectory);
         var apiClient = new GatherApiClient(httpClient, jsonOpts, authService);
+        var claudeClient = new ClaudeApiClient(claudeApiKey);
 
         services.AddSingleton(authService);
         services.AddSingleton(apiClient);
+        services.AddSingleton(claudeClient);
         services.AddSingleton(sp => new MainViewModel(
-            apiClient, authService, agentId, watchedPostIds, pollInterval, keysDirectory));
+            apiClient, authService, agentId, watchedPostIds, pollInterval, keysDirectory,
+            claudeApiKey, newBadgeDurationMinutes));
         services.AddTransient<MainWindow>();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -84,5 +102,30 @@ public partial class App : Application
         vm?.Shutdown();
         _serviceProvider?.Dispose();
         base.OnExit(e);
+    }
+
+    /// <summary>
+    /// Writes settings to appsettings.Local.json in the application directory.
+    /// </summary>
+    public static void SaveLocalSettings(string agentId, string watchedPostIds, int pollInterval,
+        string keysDirectory, string claudeApiKey, int newBadgeDurationMinutes)
+    {
+        var settings = new Dictionary<string, object>
+        {
+            ["Gather"] = new Dictionary<string, object>
+            {
+                ["AgentId"] = agentId,
+                ["WatchedPostIds"] = watchedPostIds,
+                ["PollIntervalSeconds"] = pollInterval,
+                ["KeysDirectory"] = keysDirectory,
+                ["ClaudeApiKey"] = claudeApiKey,
+                ["NewBadgeDurationMinutes"] = newBadgeDurationMinutes
+            }
+        };
+
+        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+        var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.Local.json");
+        File.WriteAllText(path, json);
+        AppLogger.Log("App", $"Settings saved to {path}");
     }
 }

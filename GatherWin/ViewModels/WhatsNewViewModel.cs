@@ -154,7 +154,8 @@ public partial class WhatsNewViewModel : ObservableObject
                         Description = agent.Description ?? "(no description)",
                         Detail = $"Posts: {agent.PostCount} | Verified: {agent.Verified}",
                         Timestamp = ParseTimestamp(agent.Created),
-                        IsNew = isNew
+                        IsNew = isNew,
+                        MarkedNewAt = isNew ? DateTimeOffset.Now : default
                     });
                 }
                 AppLogger.Log("WhatsNew", $"Agents: {agents.Agents.Count} total, {newAgentCount} new");
@@ -177,7 +178,8 @@ public partial class WhatsNewViewModel : ObservableObject
                         Description = skill.Description ?? "(no description)",
                         Detail = $"By: {skill.Author ?? skill.AuthorId ?? "unknown"} | v{skill.Version ?? "?"} | Installs: {skill.InstallCount}",
                         Timestamp = ParseTimestamp(skill.Created),
-                        IsNew = isNew
+                        IsNew = isNew,
+                        MarkedNewAt = isNew ? DateTimeOffset.Now : default
                     });
                 }
                 AppLogger.Log("WhatsNew", $"Skills: {skills.Skills.Count} total, {newSkillCount} new");
@@ -201,7 +203,8 @@ public partial class WhatsNewViewModel : ObservableObject
                         Detail = $"By: {post.Author ?? "platform"} | Score: {post.Score}",
                         Timestamp = ParseTimestamp(post.Created),
                         IsNew = isNew,
-                        PostId = post.Id
+                        PostId = post.Id,
+                        MarkedNewAt = isNew ? DateTimeOffset.Now : default
                     });
                 }
                 AppLogger.Log("WhatsNew", $"Platform posts: {platform.Posts.Count} total, {newPlatformCount} new");
@@ -225,7 +228,8 @@ public partial class WhatsNewViewModel : ObservableObject
                         Detail = $"By: {post.Author ?? "unknown"} | Score: {post.Score} | Comments: {post.CommentCount} | Weight: {post.Weight:F2}",
                         Timestamp = ParseTimestamp(post.Created),
                         IsNew = isNew,
-                        PostId = post.Id
+                        PostId = post.Id,
+                        MarkedNewAt = isNew ? DateTimeOffset.Now : default
                     });
                 }
                 AppLogger.Log("WhatsNew", $"Digest posts: {digest.Posts.Count} total, {newDigestCount} new");
@@ -649,6 +653,9 @@ public partial class WhatsNewEntry : ObservableObject
 
     /// <summary>Gather post ID — set for Trending Post and Platform Announcement entries.</summary>
     [ObservableProperty] private string? _postId;
+
+    /// <summary>When this entry was marked as new (for badge timeout).</summary>
+    [ObservableProperty] private DateTimeOffset _markedNewAt;
 
     /// <summary>True if this entry has a discussion (clickable to open).</summary>
     public bool HasPost => !string.IsNullOrEmpty(PostId);

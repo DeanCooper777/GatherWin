@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GatherWin.Models;
@@ -19,6 +20,18 @@ public partial class MainViewModel : ObservableObject
     private string[] _watchedPostIds;
     private int _pollIntervalSeconds;
     private readonly string _keysDirectory;
+    private string _claudeApiKey;
+    private int _newBadgeDurationMinutes;
+
+    // Badge expiry timer
+    private readonly DispatcherTimer _badgeExpiryTimer;
+
+    // Agent identity cache (Feature 10)
+    [ObservableProperty] private string _currentAgentName = string.Empty;
+    [ObservableProperty] private string _currentAgentDescription = string.Empty;
+
+    // Agent lookup cache (Feature 9)
+    private readonly Dictionary<string, AgentItem> _agentCache = new();
 
     [ObservableProperty] private bool _isConnected;
     [ObservableProperty] private bool _isConnecting;
@@ -39,6 +52,10 @@ public partial class MainViewModel : ObservableObject
     public WhatsNewViewModel WhatsNew { get; }
     public ObservableCollection<ActivityItem> AllActivity { get; } = new();
 
+    public string AgentId => _agentId;
+    public string ClaudeApiKey => _claudeApiKey;
+    public int NewBadgeDurationMinutes => _newBadgeDurationMinutes;
+
     /// <summary>Raised when new activity arrives and the window should flash.</summary>
     public event EventHandler? NewActivityArrived;
 
@@ -48,7 +65,9 @@ public partial class MainViewModel : ObservableObject
         string agentId,
         string[] watchedPostIds,
         int pollIntervalSeconds,
-        string keysDirectory)
+        string keysDirectory,
+        string claudeApiKey = "",
+        int newBadgeDurationMinutes = 30)
     {
         _api = api;
         _auth = auth;
@@ -56,6 +75,8 @@ public partial class MainViewModel : ObservableObject
         _watchedPostIds = watchedPostIds;
         _pollIntervalSeconds = pollIntervalSeconds;
         _keysDirectory = keysDirectory;
+        _claudeApiKey = claudeApiKey;
+        _newBadgeDurationMinutes = newBadgeDurationMinutes;
 
         Account = new AccountViewModel();
         Comments = new CommentsViewModel(api);
@@ -64,8 +85,20 @@ public partial class MainViewModel : ObservableObject
         Channels = new ChannelsViewModel(api);
         WhatsNew = new WhatsNewViewModel(api, keysDirectory);
 
+        // Wire subscribe/unsubscribe callbacks
+        Feed.SubscribeRequested = postId => _ = SubscribeToPostAsync(postId);
+        Comments.UnsubscribeRequested = postId => UnsubscribeFromPost(postId);
+
         // Apply saved font scale
         FontScale = WhatsNew.Options.FontScalePercent / 100.0;
+
+        // Badge expiry timer — ticks every 30 seconds
+        _badgeExpiryTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(30)
+        };
+        _badgeExpiryTimer.Tick += BadgeExpiryTimer_Tick;
+        _badgeExpiryTimer.Start();
 
         // Watch for token refreshes
         _auth.TokenRefreshed += (_, expiry) =>
@@ -96,6 +129,59 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // ── Badge Expiry Timer ─────────────────────────────────────
+
+    private void BadgeExpiryTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_newBadgeDurationMinutes <= 0) return;
+
+        var cutoff = DateTimeOffset.Now.AddMinutes(-_newBadgeDurationMinutes);
+
+        ExpireBadges(AllActivity, cutoff);
+        ExpireBadges(Comments.Comments, cutoff);
+        ExpireBadges(Inbox.Messages, cutoff);
+        ExpireBadges(Feed.Posts, cutoff);
+        ExpireWhatsNewBadges(cutoff);
+        ExpireChannelBadges(cutoff);
+    }
+
+    private void ExpireBadges(ObservableCollection<ActivityItem> items, DateTimeOffset cutoff)
+    {
+        foreach (var item in items)
+        {
+            if (item.IsNew && item.MarkedNewAt != default && item.MarkedNewAt < cutoff)
+            {
+                item.IsNew = false;
+            }
+        }
+    }
+
+    private void ExpireWhatsNewBadges(DateTimeOffset cutoff)
+    {
+        foreach (var entry in WhatsNew.Entries)
+        {
+            if (entry.IsNew && entry.MarkedNewAt != default && entry.MarkedNewAt < cutoff)
+            {
+                entry.IsNew = false;
+            }
+        }
+    }
+
+    private void ExpireChannelBadges(DateTimeOffset cutoff)
+    {
+        foreach (var channel in Channels.Channels)
+        {
+            foreach (var msg in channel.Messages)
+            {
+                if (msg.IsNew && msg.MarkedNewAt != default && msg.MarkedNewAt < cutoff)
+                {
+                    msg.IsNew = false;
+                    channel.NewMessageCount = Math.Max(0, channel.NewMessageCount - 1);
+                }
+            }
+        }
+    }
+
     [RelayCommand]
     private async Task ConnectAsync(CancellationToken ct)
     {
@@ -122,6 +208,22 @@ public partial class MainViewModel : ObservableObject
             TokenExpiryDisplay = $"Token valid until {_auth.TokenExpiry.ToLocalTime():HH:mm:ss}";
             AppLogger.Log("VM", "Authenticated OK");
 
+            // Fetch own agent info (Feature 10)
+            try
+            {
+                var agentInfo = await _api.GetAgentByIdAsync(_agentId, ct);
+                if (agentInfo is not null)
+                {
+                    CurrentAgentName = agentInfo.Name ?? _agentId;
+                    CurrentAgentDescription = agentInfo.Description ?? "";
+                    AppLogger.Log("VM", $"Agent identity: {CurrentAgentName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogError("VM: Failed to fetch agent info", ex);
+            }
+
             // Fetch balance
             AppLogger.Log("VM", "Fetching balance...");
             var balance = await _api.GetBalanceAsync(ct);
@@ -135,7 +237,7 @@ public partial class MainViewModel : ObservableObject
                 AppLogger.Log("VM", "Balance response was null");
             }
 
-            // Fetch watched post stats
+            // Fetch watched post stats and populate Discussions list
             AppLogger.Log("VM", $"Loading stats for {_watchedPostIds.Length} watched posts...");
             await LoadWatchedPostStatsAsync(ct);
 
@@ -179,12 +281,17 @@ public partial class MainViewModel : ObservableObject
 
     public void Shutdown()
     {
+        _badgeExpiryTimer.Stop();
         Disconnect();
     }
 
     private async Task LoadWatchedPostStatsAsync(CancellationToken ct)
     {
-        Application.Current.Dispatcher.Invoke(() => Account.WatchedPosts.Clear());
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Account.WatchedPosts.Clear();
+            Comments.Discussions.Clear();
+        });
 
         foreach (var postId in _watchedPostIds)
         {
@@ -200,7 +307,21 @@ public partial class MainViewModel : ObservableObject
                 IsVerified = post.Verified
             };
 
-            Application.Current.Dispatcher.Invoke(() => Account.WatchedPosts.Add(info));
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                Account.WatchedPosts.Add(info);
+
+                // Also populate the Discussions list (Feature 1)
+                Comments.Discussions.Add(new WatchedDiscussionItem
+                {
+                    PostId = postId,
+                    Title = post.Title ?? post.Summary ?? "(untitled)",
+                    Author = post.Author ?? "unknown",
+                    CommentCount = post.CommentCount,
+                    LastActivity = DateTimeOffset.Now,
+                    NewCommentCount = 0
+                });
+            });
         }
     }
 
@@ -209,7 +330,24 @@ public partial class MainViewModel : ObservableObject
         polling.NewCommentReceived += (_, e) =>
         {
             var isNew = !e.IsInitialLoad;
+            var now = DateTimeOffset.Now;
             Comments.AddComment(e.PostId, e.PostTitle, e.Author, e.Body, e.Timestamp, isNew);
+
+            // Update discussion list comment counts
+            if (isNew)
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var disc = Comments.Discussions.FirstOrDefault(d => d.PostId == e.PostId);
+                    if (disc is not null)
+                    {
+                        disc.CommentCount++;
+                        disc.NewCommentCount++;
+                        disc.LastActivity = now;
+                    }
+                });
+            }
+
             AddToAllActivity(new ActivityItem
             {
                 Type = ActivityType.Comment,
@@ -219,7 +357,8 @@ public partial class MainViewModel : ObservableObject
                 Body = e.Body,
                 Timestamp = e.Timestamp,
                 PostId = e.PostId,
-                IsNew = isNew
+                IsNew = isNew,
+                MarkedNewAt = isNew ? now : default
             });
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
@@ -227,6 +366,7 @@ public partial class MainViewModel : ObservableObject
         polling.NewInboxMessageReceived += (_, e) =>
         {
             var isNew = !e.IsInitialLoad;
+            var now = DateTimeOffset.Now;
             Inbox.AddMessage(e.Subject, e.Body, e.Timestamp, isNew, e.PostId, e.CommentId, e.ChannelId);
             AddToAllActivity(new ActivityItem
             {
@@ -239,7 +379,8 @@ public partial class MainViewModel : ObservableObject
                 PostId = e.PostId,
                 CommentId = e.CommentId,
                 ChannelId = e.ChannelId,
-                IsNew = isNew
+                IsNew = isNew,
+                MarkedNewAt = isNew ? now : default
             });
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
@@ -247,6 +388,7 @@ public partial class MainViewModel : ObservableObject
         polling.NewFeedPostReceived += (_, e) =>
         {
             var isNew = !e.IsInitialLoad;
+            var now = DateTimeOffset.Now;
             Feed.AddPost(e.PostId, e.Author, e.Title, e.Body, e.Timestamp, isNew);
             AddToAllActivity(new ActivityItem
             {
@@ -256,7 +398,8 @@ public partial class MainViewModel : ObservableObject
                 Author = e.Author,
                 Body = e.Body,
                 Timestamp = e.Timestamp,
-                IsNew = isNew
+                IsNew = isNew,
+                MarkedNewAt = isNew ? now : default
             });
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
@@ -264,7 +407,9 @@ public partial class MainViewModel : ObservableObject
         polling.NewChannelMessageReceived += (_, e) =>
         {
             var isNew = !e.IsInitialLoad;
-            Channels.AddMessage(e.ChannelId, e.ChannelName, e.Author, e.Body, e.Timestamp, isNew);
+            var now = DateTimeOffset.Now;
+            Channels.AddMessage(e.ChannelId, e.ChannelName, e.MessageId, e.Author, e.Body,
+                e.Timestamp, isNew, e.ReplyTo);
             AddToAllActivity(new ActivityItem
             {
                 Type = ActivityType.Channel,
@@ -275,7 +420,8 @@ public partial class MainViewModel : ObservableObject
                 Timestamp = e.Timestamp,
                 ChannelId = e.ChannelId,
                 ChannelName = e.ChannelName,
-                IsNew = isNew
+                IsNew = isNew,
+                MarkedNewAt = isNew ? now : default
             });
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
@@ -368,6 +514,89 @@ public partial class MainViewModel : ObservableObject
         await WhatsNew.LoadDiscussionAsync(entry, CancellationToken.None);
     }
 
+    // ── Subscribe / Unsubscribe (Features 4 & 5) ────────────────
+
+    public async Task SubscribeToPostAsync(string postId)
+    {
+        if (_watchedPostIds.Contains(postId))
+        {
+            AppLogger.Log("VM", $"Already subscribed to {postId}");
+            return;
+        }
+
+        AppLogger.Log("VM", $"Subscribing to post {postId}");
+
+        // Add to watched post IDs
+        _watchedPostIds = [.. _watchedPostIds, postId];
+
+        // Update polling
+        _polling?.UpdateSettings(_watchedPostIds, _pollIntervalSeconds);
+
+        // Persist settings
+        App.SaveLocalSettings(_agentId, string.Join(",", _watchedPostIds), _pollIntervalSeconds,
+            _keysDirectory, _claudeApiKey, _newBadgeDurationMinutes);
+
+        // Load post info and add to Discussions list
+        var post = await _api.GetPostWithCommentsAsync(postId, CancellationToken.None);
+        if (post is not null)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (!Comments.Discussions.Any(d => d.PostId == postId))
+                {
+                    Comments.Discussions.Add(new WatchedDiscussionItem
+                    {
+                        PostId = postId,
+                        Title = post.Title ?? post.Summary ?? "(untitled)",
+                        Author = post.Author ?? "unknown",
+                        CommentCount = post.CommentCount,
+                        LastActivity = DateTimeOffset.Now,
+                        NewCommentCount = 0
+                    });
+                }
+            });
+        }
+    }
+
+    public void UnsubscribeFromPost(string postId)
+    {
+        AppLogger.Log("VM", $"Unsubscribing from post {postId}");
+
+        _watchedPostIds = _watchedPostIds.Where(id => id != postId).ToArray();
+        _polling?.UpdateSettings(_watchedPostIds, _pollIntervalSeconds);
+
+        App.SaveLocalSettings(_agentId, string.Join(",", _watchedPostIds), _pollIntervalSeconds,
+            _keysDirectory, _claudeApiKey, _newBadgeDurationMinutes);
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            var disc = Comments.Discussions.FirstOrDefault(d => d.PostId == postId);
+            if (disc is not null)
+                Comments.Discussions.Remove(disc);
+        });
+    }
+
+    // ── Agent Lookup (Feature 9) ────────────────────────────────
+
+    public async Task<AgentItem?> LookupAgentAsync(string name)
+    {
+        if (_agentCache.TryGetValue(name, out var cached))
+            return cached;
+
+        try
+        {
+            var agent = await _api.GetAgentByNameAsync(name, CancellationToken.None);
+            if (agent is not null)
+                _agentCache[name] = agent;
+            return agent;
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError($"VM: Failed to lookup agent '{name}'", ex);
+            return null;
+        }
+    }
+
     [RelayCommand]
     private void ClearAllActivity()
     {
@@ -384,7 +613,11 @@ public partial class MainViewModel : ObservableObject
             _agentId,
             string.Join(",", _watchedPostIds),
             _pollIntervalSeconds,
-            WhatsNew.Options)
+            WhatsNew.Options,
+            _claudeApiKey,
+            _newBadgeDurationMinutes,
+            CurrentAgentName,
+            CurrentAgentDescription)
         {
             Owner = Application.Current.MainWindow
         };
@@ -392,10 +625,11 @@ public partial class MainViewModel : ObservableObject
         if (dialog.ShowDialog() == true)
         {
             // Apply connection settings — will take effect on next connect
-            // (We don't change _agentId at runtime since it requires reconnect)
             _watchedPostIds = dialog.WatchedPostIds
                 .Split(',', StringSplitOptions.RemoveEmptyEntries);
             _pollIntervalSeconds = dialog.PollIntervalSeconds;
+            _claudeApiKey = dialog.ClaudeApiKey;
+            _newBadgeDurationMinutes = dialog.NewBadgeDurationMinutes;
 
             // Apply What's New display options
             WhatsNew.Options.MaxDigestPosts = dialog.MaxDigestPosts;
@@ -409,9 +643,13 @@ public partial class MainViewModel : ObservableObject
 
             WhatsNew.SaveOptions();
 
+            // Persist to appsettings.Local.json
+            App.SaveLocalSettings(_agentId, string.Join(",", _watchedPostIds), _pollIntervalSeconds,
+                _keysDirectory, _claudeApiKey, _newBadgeDurationMinutes);
+
             AppLogger.Log("VM", $"Options saved: PollInterval={_pollIntervalSeconds}s, " +
                 $"MaxDigest={dialog.MaxDigestPosts}, MaxPlatform={dialog.MaxPlatformPosts}, " +
-                $"FontScale={dialog.FontScalePercent}%");
+                $"FontScale={dialog.FontScalePercent}%, BadgeDuration={_newBadgeDurationMinutes}min");
         }
     }
 }

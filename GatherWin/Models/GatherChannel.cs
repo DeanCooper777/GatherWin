@@ -29,4 +29,5 @@ public class ChannelMessage
     public string? AuthorName { get; set; }
     public string? Body { get; set; }
     public string? Created { get; set; }
+    public string? ReplyTo { get; set; }
 }

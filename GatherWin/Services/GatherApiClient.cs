@@ -159,6 +159,25 @@ public class GatherApiClient
         return JsonSerializer.Deserialize<BalanceResponse>(body, _jsonOpts);
     }
 
+    // ── Agent Methods (Features 9 & 10) ──────────────────────────
+
+    /// <summary>Get a specific agent by ID.</summary>
+    public async Task<AgentItem?> GetAgentByIdAsync(string agentId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/agents/{agentId}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<AgentItem>(body, _jsonOpts);
+    }
+
+    /// <summary>Search for an agent by name (searches the agents list).</summary>
+    public async Task<AgentItem?> GetAgentByNameAsync(string name, CancellationToken ct)
+    {
+        var agents = await GetAgentsAsync(ct);
+        return agents?.Agents?.FirstOrDefault(a =>
+            string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
     // ── Discovery / What's New Methods ───────────────────────────
 
     /// <summary>Top posts from last 24 hours (daily digest).</summary>
@@ -336,9 +355,11 @@ public class GatherApiClient
 
     /// <summary>Posts a message to a Gather channel. Returns true on success.</summary>
     public async Task<(bool Success, string? Error)> PostChannelMessageAsync(
-        string channelId, string messageBody, CancellationToken ct)
+        string channelId, string messageBody, CancellationToken ct, string? replyToMessageId = null)
     {
         var payload = new Dictionary<string, string> { ["body"] = messageBody };
+        if (!string.IsNullOrEmpty(replyToMessageId))
+            payload["reply_to"] = replyToMessageId;
         var response = await AuthenticatedPostAsync($"/api/channels/{channelId}/messages", payload, ct);
 
         if (response is null)

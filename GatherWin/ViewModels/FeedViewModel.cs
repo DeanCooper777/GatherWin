@@ -24,6 +24,25 @@ public partial class FeedViewModel : ObservableObject
     [ObservableProperty] private bool _isPosting;
     [ObservableProperty] private string? _postError;
 
+    // ── Discussion Panel State (Feature 4) ───────────────────────
+    [ObservableProperty] private string? _discussionPostId;
+    [ObservableProperty] private string _discussionTitle = string.Empty;
+    [ObservableProperty] private string _discussionBody = string.Empty;
+    [ObservableProperty] private string _discussionAuthor = string.Empty;
+    [ObservableProperty] private bool _isLoadingDiscussion;
+    [ObservableProperty] private bool _hasDiscussion;
+    [ObservableProperty] private string _discussionReplyText = string.Empty;
+    [ObservableProperty] private bool _isSendingDiscussionReply;
+    [ObservableProperty] private string? _discussionSendError;
+    [ObservableProperty] private DiscussionComment? _replyToComment;
+    [ObservableProperty] private bool _isPostBodyExpanded;
+    [ObservableProperty] private bool _isReplyExpanded;
+
+    public ObservableCollection<DiscussionComment> DiscussionComments { get; } = new();
+
+    /// <summary>Callback to subscribe to a post (wired by MainViewModel).</summary>
+    public Action<string>? SubscribeRequested { get; set; }
+
     public FeedViewModel(GatherApiClient api)
     {
         _api = api;
@@ -39,7 +58,8 @@ public partial class FeedViewModel : ObservableObject
             Author = author,
             Body = body,
             Timestamp = timestamp,
-            IsNew = isNew
+            IsNew = isNew,
+            MarkedNewAt = isNew ? DateTimeOffset.Now : default
         };
 
         Application.Current.Dispatcher.Invoke(() =>
@@ -139,6 +159,202 @@ public partial class FeedViewModel : ObservableObject
         }
     }
 
+    // ── Discussion Panel Methods (Feature 4) ─────────────────────
+
+    public async Task LoadDiscussionAsync(ActivityItem post, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(post.Id)) return;
+
+        DiscussionPostId = post.Id;
+        DiscussionTitle = post.Title;
+        DiscussionBody = string.Empty;
+        DiscussionAuthor = post.Author;
+        IsLoadingDiscussion = true;
+        HasDiscussion = true;
+        DiscussionSendError = null;
+        DiscussionReplyText = string.Empty;
+        ReplyToComment = null;
+        IsPostBodyExpanded = false;
+        IsReplyExpanded = false;
+
+        Application.Current.Dispatcher.Invoke(() => DiscussionComments.Clear());
+
+        try
+        {
+            var fullPost = await _api.GetPostWithCommentsAsync(post.Id, ct);
+            if (fullPost is null)
+            {
+                DiscussionBody = "(Failed to load post)";
+                return;
+            }
+
+            DiscussionTitle = fullPost.Title ?? fullPost.Summary ?? "(untitled)";
+            DiscussionBody = fullPost.Body ?? fullPost.Summary ?? "(no body)";
+            DiscussionAuthor = fullPost.Author ?? "unknown";
+
+            var comments = fullPost.Comments ?? [];
+            var commentMap = comments.Where(c => c.Id is not null).ToDictionary(c => c.Id!);
+            var topLevel = comments.Where(c => string.IsNullOrEmpty(c.ReplyTo)).ToList();
+            var replies = comments.Where(c => !string.IsNullOrEmpty(c.ReplyTo)).ToList();
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                foreach (var c in topLevel.OrderBy(c => ParseTimestamp(c.Created)))
+                {
+                    DiscussionComments.Add(new DiscussionComment
+                    {
+                        CommentId = c.Id ?? "",
+                        Author = c.Author ?? "unknown",
+                        Body = c.Body ?? "(empty)",
+                        Timestamp = ParseTimestamp(c.Created),
+                        IsVerified = c.Verified,
+                        IndentLevel = 0
+                    });
+
+                    AddReplies(c.Id!, replies, commentMap, 1);
+                }
+            });
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            DiscussionBody = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsLoadingDiscussion = false;
+        }
+    }
+
+    private void AddReplies(string parentId, List<GatherComment> allReplies, Dictionary<string, GatherComment> commentMap, int depth)
+    {
+        var childReplies = allReplies.Where(r => r.ReplyTo == parentId).OrderBy(r => ParseTimestamp(r.Created));
+        foreach (var reply in childReplies)
+        {
+            DiscussionComments.Add(new DiscussionComment
+            {
+                CommentId = reply.Id ?? "",
+                Author = reply.Author ?? "unknown",
+                Body = reply.Body ?? "(empty)",
+                Timestamp = ParseTimestamp(reply.Created),
+                IsVerified = reply.Verified,
+                IndentLevel = depth,
+                ReplyToId = parentId
+            });
+
+            if (reply.Id is not null)
+                AddReplies(reply.Id, allReplies, commentMap, depth + 1);
+        }
+    }
+
+    public void CloseDiscussion()
+    {
+        HasDiscussion = false;
+        DiscussionPostId = null;
+        ReplyToComment = null;
+        Application.Current.Dispatcher.Invoke(() => DiscussionComments.Clear());
+    }
+
+    public void SetReplyTo(DiscussionComment? comment)
+    {
+        ReplyToComment = comment;
+        DiscussionSendError = null;
+    }
+
+    [RelayCommand]
+    private void CancelFeedReplyTo()
+    {
+        ReplyToComment = null;
+    }
+
+    [RelayCommand]
+    private async Task SendFeedReplyAsync(CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(DiscussionPostId) || string.IsNullOrWhiteSpace(DiscussionReplyText))
+            return;
+
+        IsSendingDiscussionReply = true;
+        DiscussionSendError = null;
+
+        try
+        {
+            var replyToId = ReplyToComment?.CommentId;
+            var (success, error) = await _api.PostCommentAsync(
+                DiscussionPostId, DiscussionReplyText.Trim(), ct, replyToId);
+
+            if (success)
+            {
+                var indentLevel = ReplyToComment is not null ? ReplyToComment.IndentLevel + 1 : 0;
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var newComment = new DiscussionComment
+                    {
+                        CommentId = Guid.NewGuid().ToString(),
+                        Author = "OnTheEdgeOfReality",
+                        Body = DiscussionReplyText.Trim(),
+                        Timestamp = DateTimeOffset.Now,
+                        IsVerified = false,
+                        IndentLevel = indentLevel,
+                        ReplyToId = replyToId
+                    };
+
+                    if (ReplyToComment is not null)
+                    {
+                        var parentIndex = DiscussionComments.IndexOf(ReplyToComment);
+                        if (parentIndex >= 0)
+                        {
+                            int insertAt = parentIndex + 1;
+                            while (insertAt < DiscussionComments.Count &&
+                                   DiscussionComments[insertAt].IndentLevel > ReplyToComment.IndentLevel)
+                            {
+                                insertAt++;
+                            }
+                            DiscussionComments.Insert(insertAt, newComment);
+                        }
+                        else
+                        {
+                            DiscussionComments.Add(newComment);
+                        }
+                    }
+                    else
+                    {
+                        DiscussionComments.Add(newComment);
+                    }
+                });
+
+                DiscussionReplyText = string.Empty;
+                ReplyToComment = null;
+            }
+            else
+            {
+                DiscussionSendError = error ?? "Failed to send reply";
+            }
+        }
+        catch (Exception ex)
+        {
+            DiscussionSendError = ex.Message;
+        }
+        finally
+        {
+            IsSendingDiscussionReply = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RefreshFeedDiscussionAsync(CancellationToken ct)
+    {
+        if (SelectedPost is not null)
+            await LoadDiscussionAsync(SelectedPost, ct);
+    }
+
+    [RelayCommand]
+    private void Subscribe()
+    {
+        if (DiscussionPostId is not null)
+            SubscribeRequested?.Invoke(DiscussionPostId);
+    }
+
     private static void InsertSorted(ObservableCollection<ActivityItem> list, ActivityItem item)
     {
         for (int i = 0; i < list.Count; i++)
@@ -150,5 +366,12 @@ public partial class FeedViewModel : ObservableObject
             }
         }
         list.Add(item);
+    }
+
+    private static DateTimeOffset ParseTimestamp(string? ts)
+    {
+        if (ts is not null && DateTimeOffset.TryParse(ts, out var dto))
+            return dto;
+        return DateTimeOffset.UtcNow;
     }
 }

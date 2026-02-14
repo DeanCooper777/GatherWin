@@ -20,9 +20,19 @@ public partial class SettingsWindow : Window
     // Appearance
     public int FontScalePercent { get; private set; } = 100;
 
+    // Feature 3: Claude API Key
+    public string ClaudeApiKey { get; private set; } = string.Empty;
+
+    // Feature 2: Badge duration
+    public int NewBadgeDurationMinutes { get; private set; } = 30;
+
     public SettingsWindow(
         string agentId, string watchedPostIds, int pollInterval,
-        WhatsNewOptions whatsNewOptions)
+        WhatsNewOptions whatsNewOptions,
+        string claudeApiKey = "",
+        int newBadgeDurationMinutes = 30,
+        string agentName = "",
+        string agentDescription = "")
     {
         InitializeComponent();
 
@@ -30,6 +40,8 @@ public partial class SettingsWindow : Window
         AgentIdBox.Text = agentId;
         WatchedPostsBox.Text = watchedPostIds;
         IntervalBox.Text = pollInterval.ToString();
+        ClaudeApiKeyBox.Password = claudeApiKey;
+        BadgeDurationBox.Text = newBadgeDurationMinutes.ToString();
 
         // What's New display options
         MaxDigestBox.Text = whatsNewOptions.MaxDigestPosts.ToString();
@@ -40,6 +52,10 @@ public partial class SettingsWindow : Window
         // Appearance — set slider value (triggers ValueChanged to update label)
         FontScaleSlider.Value = whatsNewOptions.FontScalePercent;
         FontScaleLabel.Text = $"{whatsNewOptions.FontScalePercent}%";
+
+        // Identity (Feature 10)
+        IdentityNameBox.Text = string.IsNullOrEmpty(agentName) ? "(not loaded)" : agentName;
+        IdentityDescBox.Text = string.IsNullOrEmpty(agentDescription) ? "(no description)" : agentDescription;
     }
 
     private void FontScaleSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -48,12 +64,20 @@ public partial class SettingsWindow : Window
             FontScaleLabel.Text = $"{(int)FontScaleSlider.Value}%";
     }
 
+    private void EditIdentity_Click(object sender, RoutedEventArgs e)
+    {
+        MessageBox.Show("Editing identity is not currently supported by the gather.is API.",
+            "Not Available", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         // Connection settings
         AgentId = AgentIdBox.Text.Trim();
         WatchedPostIds = WatchedPostsBox.Text.Trim();
         PollIntervalSeconds = int.TryParse(IntervalBox.Text, out var pi) ? pi : 60;
+        ClaudeApiKey = ClaudeApiKeyBox.Password.Trim();
+        NewBadgeDurationMinutes = int.TryParse(BadgeDurationBox.Text, out var bd) ? bd : 30;
 
         // What's New display options
         MaxDigestPosts = int.TryParse(MaxDigestBox.Text, out var md) ? md : 20;

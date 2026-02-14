@@ -16,6 +16,9 @@ public partial class ChannelInfo : ObservableObject
     [ObservableProperty] private int _newMessageCount;
 
     public ObservableCollection<ActivityItem> Messages { get; } = new();
+
+    /// <summary>Threaded view of messages (Feature 8).</summary>
+    public ObservableCollection<DiscussionComment> ThreadedMessages { get; } = new();
 }
 
 public partial class ChannelsViewModel : ObservableObject
@@ -30,6 +33,9 @@ public partial class ChannelsViewModel : ObservableObject
     [ObservableProperty] private int _newCount;
     [ObservableProperty] private string? _sendError;
 
+    // ── Reply-to state for threaded messages (Feature 8) ─────────
+    [ObservableProperty] private DiscussionComment? _replyToMessage;
+
     // ── Channel Creation State ──────────────────────────────────
     [ObservableProperty] private bool _isCreatingChannel;
     [ObservableProperty] private string _newChannelName = string.Empty;
@@ -42,7 +48,8 @@ public partial class ChannelsViewModel : ObservableObject
         _api = api;
     }
 
-    public void AddMessage(string channelId, string channelName, string author, string body, DateTimeOffset timestamp, bool isNew = true)
+    public void AddMessage(string channelId, string channelName, string messageId, string author,
+        string body, DateTimeOffset timestamp, bool isNew = true, string? replyTo = null)
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -57,17 +64,64 @@ public partial class ChannelsViewModel : ObservableObject
             var item = new ActivityItem
             {
                 Type = ActivityType.Channel,
-                Id = Guid.NewGuid().ToString(),
+                Id = messageId,
                 Title = channelName,
                 Author = author,
                 Body = body,
                 Timestamp = timestamp,
                 ChannelId = channelId,
                 ChannelName = channelName,
-                IsNew = isNew
+                IsNew = isNew,
+                MarkedNewAt = isNew ? DateTimeOffset.Now : default
             };
 
             InsertSorted(channel.Messages, item);
+
+            // Also add to threaded view
+            var threadedMsg = new DiscussionComment
+            {
+                CommentId = messageId,
+                Author = author,
+                Body = body,
+                Timestamp = timestamp,
+                IndentLevel = 0,
+                ReplyToId = replyTo
+            };
+
+            if (!string.IsNullOrEmpty(replyTo))
+            {
+                // Find parent and insert after it with indent
+                var parentIdx = -1;
+                for (int i = 0; i < channel.ThreadedMessages.Count; i++)
+                {
+                    if (channel.ThreadedMessages[i].CommentId == replyTo)
+                    {
+                        parentIdx = i;
+                        threadedMsg.IndentLevel = channel.ThreadedMessages[i].IndentLevel + 1;
+                        break;
+                    }
+                }
+
+                if (parentIdx >= 0)
+                {
+                    int insertAt = parentIdx + 1;
+                    while (insertAt < channel.ThreadedMessages.Count &&
+                           channel.ThreadedMessages[insertAt].IndentLevel > channel.ThreadedMessages[parentIdx].IndentLevel)
+                    {
+                        insertAt++;
+                    }
+                    channel.ThreadedMessages.Insert(insertAt, threadedMsg);
+                }
+                else
+                {
+                    channel.ThreadedMessages.Add(threadedMsg);
+                }
+            }
+            else
+            {
+                channel.ThreadedMessages.Add(threadedMsg);
+            }
+
             if (isNew)
             {
                 channel.NewMessageCount++;
@@ -91,6 +145,18 @@ public partial class ChannelsViewModel : ObservableObject
         list.Add(item);
     }
 
+    public void SetReplyTo(DiscussionComment? message)
+    {
+        ReplyToMessage = message;
+        SendError = null;
+    }
+
+    [RelayCommand]
+    private void CancelChannelReplyTo()
+    {
+        ReplyToMessage = null;
+    }
+
     [RelayCommand]
     private async Task SendMessageAsync(CancellationToken ct)
     {
@@ -102,8 +168,9 @@ public partial class ChannelsViewModel : ObservableObject
 
         try
         {
+            var replyToId = ReplyToMessage?.CommentId;
             var (success, error) = await _api.PostChannelMessageAsync(
-                SelectedChannel.Id, ReplyText.Trim(), ct);
+                SelectedChannel.Id, ReplyText.Trim(), ct, replyToId);
 
             if (success)
             {
@@ -120,10 +187,46 @@ public partial class ChannelsViewModel : ObservableObject
                     IsNew = false
                 };
 
+                var threadedMsg = new DiscussionComment
+                {
+                    CommentId = msg.Id,
+                    Author = "OnTheEdgeOfReality",
+                    Body = ReplyText.Trim(),
+                    Timestamp = DateTimeOffset.Now,
+                    IndentLevel = ReplyToMessage?.IndentLevel + 1 ?? 0,
+                    ReplyToId = replyToId
+                };
+
                 Application.Current.Dispatcher.Invoke(() =>
-                    SelectedChannel.Messages.Insert(0, msg));
+                {
+                    SelectedChannel.Messages.Insert(0, msg);
+
+                    if (ReplyToMessage is not null)
+                    {
+                        var parentIdx = SelectedChannel.ThreadedMessages.IndexOf(ReplyToMessage);
+                        if (parentIdx >= 0)
+                        {
+                            int insertAt = parentIdx + 1;
+                            while (insertAt < SelectedChannel.ThreadedMessages.Count &&
+                                   SelectedChannel.ThreadedMessages[insertAt].IndentLevel > ReplyToMessage.IndentLevel)
+                            {
+                                insertAt++;
+                            }
+                            SelectedChannel.ThreadedMessages.Insert(insertAt, threadedMsg);
+                        }
+                        else
+                        {
+                            SelectedChannel.ThreadedMessages.Add(threadedMsg);
+                        }
+                    }
+                    else
+                    {
+                        SelectedChannel.ThreadedMessages.Add(threadedMsg);
+                    }
+                });
 
                 ReplyText = string.Empty;
+                ReplyToMessage = null;
             }
             else
             {
@@ -142,7 +245,6 @@ public partial class ChannelsViewModel : ObservableObject
 
     // ── Channel Creation ────────────────────────────────────────
 
-    /// <summary>Show the "create channel" inline form.</summary>
     [RelayCommand]
     private void ShowCreateChannel()
     {
@@ -152,7 +254,6 @@ public partial class ChannelsViewModel : ObservableObject
         CreateError = null;
     }
 
-    /// <summary>Hide the "create channel" inline form.</summary>
     [RelayCommand]
     private void CancelCreateChannel()
     {
@@ -162,7 +263,6 @@ public partial class ChannelsViewModel : ObservableObject
         CreateError = null;
     }
 
-    /// <summary>Create the channel via API and add it to the list.</summary>
     [RelayCommand]
     private async Task CreateChannelAsync(CancellationToken ct)
     {

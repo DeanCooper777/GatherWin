@@ -332,7 +332,8 @@ public class PollingService
                         Author = m.AuthorName ?? m.AuthorId ?? "unknown",
                         Body = m.Body ?? "(empty)",
                         Timestamp = ParseTimestamp(m.Created),
-                        IsInitialLoad = true
+                        IsInitialLoad = true,
+                        ReplyTo = m.ReplyTo
                     });
                 }
                 continue;
@@ -352,7 +353,8 @@ public class PollingService
                     MessageId = msg.Id,
                     Author = msg.AuthorName ?? msg.AuthorId ?? "unknown",
                     Body = msg.Body ?? "(empty)",
-                    Timestamp = ParseTimestamp(msg.Created)
+                    Timestamp = ParseTimestamp(msg.Created),
+                    ReplyTo = msg.ReplyTo
                 });
             }
 
@@ -423,6 +425,7 @@ public class ChannelMessageEventArgs : EventArgs
     public required string Body { get; init; }
     public required DateTimeOffset Timestamp { get; init; }
     public bool IsInitialLoad { get; init; }
+    public string? ReplyTo { get; init; }
 }
 
 public class InitialStateEventArgs : EventArgs

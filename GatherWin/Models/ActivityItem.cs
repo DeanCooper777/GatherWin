@@ -24,4 +24,7 @@ public partial class ActivityItem : ObservableObject
     [ObservableProperty] private string? _channelName;
     [ObservableProperty] private bool _isNew = true;
     [ObservableProperty] private bool _isExpanded;
+
+    /// <summary>When this item was marked as new (for badge timeout).</summary>
+    [ObservableProperty] private DateTimeOffset _markedNewAt;
 }

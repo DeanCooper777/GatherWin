@@ -5,6 +5,7 @@
         xmlns:converters="clr-namespace:GatherWin.Converters"
         xmlns:models="clr-namespace:GatherWin.Models"
         xmlns:vm="clr-namespace:GatherWin.ViewModels"
+        xmlns:helpers="clr-namespace:GatherWin.Helpers"
         Title="GatherWin — OnTheEdgeOfReality"
         Width="900" Height="700"
         MinWidth="600" MinHeight="450"
@@ -22,6 +23,7 @@
         <converters:AuthorBodyFormatterConverter x:Key="AuthorBodyFormatter"/>
         <converters:WhatsNewCategoryToBrushConverter x:Key="CategoryToBrush"/>
         <converters:IndentToMarginConverter x:Key="IndentToMargin"/>
+        <converters:IsCurrentUserToVisibilityConverter x:Key="IsCurrentUserToVis"/>
 
         <!-- What's New card template -->
         <DataTemplate x:Key="WhatsNewCardTemplate" DataType="{x:Type vm:WhatsNewEntry}">
@@ -61,17 +63,18 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Description — selectable text when expanded, click-through when collapsed -->
-                    <TextBox Grid.Row="1"
-                             Text="{Binding Description, Mode=OneWay}" TextWrapping="Wrap"
-                             IsReadOnly="True" IsReadOnlyCaretVisible="True"
-                             BorderThickness="0" Background="Transparent" Padding="0"
-                             FontSize="12" Foreground="#444" Margin="0,4,0,0"
-                             Cursor="IBeam" Focusable="True"
-                             IsHitTestVisible="{Binding IsExpanded}"
-                             VerticalScrollBarVisibility="Disabled">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox">
+                    <!-- Description (markdown rendered) -->
+                    <RichTextBox Grid.Row="1"
+                                 helpers:MarkdownHelper.MarkdownText="{Binding Description, Mode=OneWay}"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                                 BorderThickness="0" Background="Transparent" Padding="0"
+                                 FontSize="12" Foreground="#444" Margin="0,4,0,0"
+                                 Cursor="IBeam" Focusable="True"
+                                 IsHitTestVisible="{Binding IsExpanded}"
+                                 IsDocumentEnabled="True"
+                                 VerticalScrollBarVisibility="Disabled">
+                        <RichTextBox.Style>
+                            <Style TargetType="RichTextBox">
                                 <Setter Property="MaxHeight" Value="60"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsExpanded}" Value="True">
@@ -79,8 +82,8 @@
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </TextBox.Style>
-                    </TextBox>
+                        </RichTextBox.Style>
+                    </RichTextBox>
 
                     <!-- Detail line (visible when expanded) -->
                     <TextBlock Grid.Row="2"
@@ -111,6 +114,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <!-- Header: Type + Title + Author -->
                         <StackPanel Grid.Column="0" Orientation="Horizontal">
@@ -139,24 +143,52 @@
                                        TextTrimming="CharacterEllipsis" MaxWidth="400"/>
                             <TextBlock Text=" — " Foreground="#999" FontSize="11"
                                        Visibility="{Binding Author, Converter={StaticResource NotNullToVis}}"/>
-                            <TextBlock Text="{Binding Author}" FontSize="11" Foreground="#777"/>
+                            <!-- Feature 9: Clickable author name -->
+                            <TextBlock Text="{Binding Author}" FontSize="11" Foreground="#3498DB"
+                                       Cursor="Hand" MouseLeftButtonUp="AuthorName_Click">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="TextDecorations" Value="Underline"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </StackPanel>
+                        <!-- Feature 6: Edit button (own messages only) -->
+                        <Button Grid.Column="1" Content="···" FontWeight="Bold" FontSize="12"
+                                Padding="6,0" Margin="4,0,0,0" Cursor="Hand"
+                                Background="Transparent" BorderThickness="0" Foreground="#999"
+                                Visibility="{Binding Author, Converter={StaticResource IsCurrentUserToVis}}"
+                                Click="MessageOptions_Click" VerticalAlignment="Center"
+                                ToolTip="Options">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Edit" Click="EditMessage_Click"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
                         <!-- Timestamp -->
-                        <TextBlock Grid.Column="1"
+                        <TextBlock Grid.Column="2"
                                    Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
                                    FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
                     </Grid>
 
-                    <!-- Body — selectable text when expanded, click-through when collapsed -->
-                    <TextBox Grid.Row="1"
-                             TextWrapping="Wrap" IsReadOnly="True" IsReadOnlyCaretVisible="True"
-                             BorderThickness="0" Background="Transparent" Padding="0"
-                             FontSize="12" Foreground="#333" Margin="0,4,0,0"
-                             Cursor="IBeam" Focusable="True"
-                             IsHitTestVisible="{Binding IsExpanded}"
-                             VerticalScrollBarVisibility="Disabled">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox">
+                    <!-- Body (markdown rendered) -->
+                    <RichTextBox Grid.Row="1"
+                                 helpers:MarkdownHelper.MarkdownText="{Binding Body, Mode=OneWay}"
+                                 helpers:MarkdownHelper.AuthorPrefix="{Binding Author, Mode=OneWay}"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                                 BorderThickness="0" Background="Transparent" Padding="0"
+                                 FontSize="12" Foreground="#333" Margin="0,4,0,0"
+                                 Cursor="IBeam" Focusable="True"
+                                 IsHitTestVisible="{Binding IsExpanded}"
+                                 IsDocumentEnabled="True"
+                                 VerticalScrollBarVisibility="Disabled">
+                        <RichTextBox.Style>
+                            <Style TargetType="RichTextBox">
                                 <Setter Property="MaxHeight" Value="80"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsExpanded}" Value="True">
@@ -164,19 +196,13 @@
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </TextBox.Style>
-                        <TextBox.Text>
-                            <MultiBinding Converter="{StaticResource AuthorBodyFormatter}">
-                                <Binding Path="Author"/>
-                                <Binding Path="Body"/>
-                            </MultiBinding>
-                        </TextBox.Text>
-                    </TextBox>
+                        </RichTextBox.Style>
+                    </RichTextBox>
                 </Grid>
             </Border>
         </DataTemplate>
 
-        <!-- Inbox card template — like ActivityCardTemplate but click navigates to referenced post -->
+        <!-- Inbox card template -->
         <DataTemplate x:Key="InboxCardTemplate" DataType="{x:Type models:ActivityItem}">
             <Border Margin="0,0,0,4" Padding="10,8"
                     CornerRadius="4" Cursor="Hand"
@@ -201,7 +227,6 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#555"
                                        TextTrimming="CharacterEllipsis" MaxWidth="400"/>
-                            <!-- Navigate indicator when post is referenced -->
                             <TextBlock Text=" →" FontSize="12" Foreground="#3498DB" FontWeight="Bold"
                                        VerticalAlignment="Center" Margin="4,0,0,0"
                                        ToolTip="Click to view referenced post"
@@ -212,16 +237,19 @@
                                    FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
                     </Grid>
 
-                    <!-- Body — selectable text when expanded, click-through when collapsed -->
-                    <TextBox Grid.Row="1"
-                             TextWrapping="Wrap" IsReadOnly="True" IsReadOnlyCaretVisible="True"
-                             BorderThickness="0" Background="Transparent" Padding="0"
-                             FontSize="12" Foreground="#333" Margin="0,4,0,0"
-                             Cursor="IBeam" Focusable="True"
-                             IsHitTestVisible="{Binding IsExpanded}"
-                             VerticalScrollBarVisibility="Disabled">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox">
+                    <!-- Body (markdown rendered) -->
+                    <RichTextBox Grid.Row="1"
+                                 helpers:MarkdownHelper.MarkdownText="{Binding Body, Mode=OneWay}"
+                                 helpers:MarkdownHelper.AuthorPrefix="{Binding Author, Mode=OneWay}"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                                 BorderThickness="0" Background="Transparent" Padding="0"
+                                 FontSize="12" Foreground="#333" Margin="0,4,0,0"
+                                 Cursor="IBeam" Focusable="True"
+                                 IsHitTestVisible="{Binding IsExpanded}"
+                                 IsDocumentEnabled="True"
+                                 VerticalScrollBarVisibility="Disabled">
+                        <RichTextBox.Style>
+                            <Style TargetType="RichTextBox">
                                 <Setter Property="MaxHeight" Value="80"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsExpanded}" Value="True">
@@ -229,14 +257,129 @@
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </TextBox.Style>
-                        <TextBox.Text>
-                            <MultiBinding Converter="{StaticResource AuthorBodyFormatter}">
-                                <Binding Path="Author"/>
-                                <Binding Path="Body"/>
-                            </MultiBinding>
-                        </TextBox.Text>
-                    </TextBox>
+                        </RichTextBox.Style>
+                    </RichTextBox>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Threaded discussion comment template (reused in Discussions, Feed, and Channel panels) -->
+        <DataTemplate x:Key="DiscussionCommentTemplate" DataType="{x:Type vm:DiscussionComment}">
+            <Border Padding="8,6" CornerRadius="4" Cursor="Hand"
+                    Margin="{Binding IndentLevel, Converter={StaticResource IndentToMargin}}"
+                    MouseLeftButtonUp="DiscussionComment_MouseLeftButtonUp">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="#F5F5F5"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IndentLevel}" Value="0">
+                                <Setter Property="Background" Value="#FFFFFF"/>
+                                <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <!-- Header -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <!-- Feature 9: Clickable author -->
+                            <TextBlock Text="{Binding Author}" FontWeight="SemiBold"
+                                       FontSize="11" Foreground="#3498DB" Margin="0,0,8,0"
+                                       Cursor="Hand" MouseLeftButtonUp="AuthorName_Click">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="TextDecorations" Value="Underline"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
+                                       FontSize="10" Foreground="#999"/>
+                        </StackPanel>
+                        <!-- Feature 6: Edit button on own comments -->
+                        <Button Grid.Column="1" Content="···" FontWeight="Bold" FontSize="10"
+                                Padding="4,0" Margin="4,0,0,0" Cursor="Hand"
+                                Background="Transparent" BorderThickness="0" Foreground="#999"
+                                Visibility="{Binding Author, Converter={StaticResource IsCurrentUserToVis}}"
+                                Click="MessageOptions_Click" VerticalAlignment="Center">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Edit" Click="EditMessage_Click"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                        <!-- Reply button -->
+                        <Button Grid.Column="2" Content="Reply"
+                                Click="ReplyToComment_Click"
+                                FontSize="9" Padding="6,1"
+                                Background="Transparent" Foreground="#3498DB"
+                                BorderBrush="#3498DB" BorderThickness="1"
+                                Cursor="Hand" VerticalAlignment="Center"/>
+                    </Grid>
+                    <RichTextBox Grid.Row="1"
+                                 helpers:MarkdownHelper.MarkdownText="{Binding Body, Mode=OneWay}"
+                                 helpers:MarkdownHelper.AuthorPrefix="{Binding Author, Mode=OneWay}"
+                                 IsReadOnly="True" IsDocumentEnabled="True"
+                                 BorderThickness="0" Background="Transparent" Padding="0"
+                                 FontSize="12" Foreground="#333" Margin="0,2,0,0"
+                                 Cursor="IBeam" Focusable="True"
+                                 IsHitTestVisible="{Binding IsExpanded}"
+                                 VerticalScrollBarVisibility="Disabled">
+                        <RichTextBox.Style>
+                            <Style TargetType="RichTextBox">
+                                <Setter Property="MaxHeight" Value="80"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                        <Setter Property="MaxHeight" Value="{x:Static system:Double.PositiveInfinity}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </RichTextBox.Style>
+                    </RichTextBox>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- Watched Discussion item template for left panel -->
+        <DataTemplate x:Key="WatchedDiscussionTemplate" DataType="{x:Type vm:WatchedDiscussionItem}">
+            <Border Margin="0,0,0,3" Padding="8,6" CornerRadius="4"
+                    Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="#333" TextTrimming="CharacterEllipsis"/>
+                        <Border Grid.Column="1" Background="#E74C3C" CornerRadius="6" Padding="4,0"
+                                Visibility="{Binding NewCommentCount, Converter={StaticResource NotZeroToVis}}">
+                            <TextBlock Text="{Binding NewCommentCount}" Foreground="White" FontSize="9"/>
+                        </Border>
+                    </Grid>
+                    <StackPanel Grid.Row="1" Orientation="Horizontal">
+                        <TextBlock Text="{Binding Author}" FontSize="10" Foreground="#777" Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding CommentCount, StringFormat={}{0} comments}"
+                                   FontSize="10" Foreground="#999"/>
+                    </StackPanel>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -350,11 +493,11 @@
                 </Grid>
             </TabItem>
 
-            <!-- Comments Tab -->
+            <!-- ═══ Discussions Tab (Feature 1: renamed from Comments, split view) ═══ -->
             <TabItem>
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Comments" FontSize="13" Padding="8,4"/>
+                        <TextBlock Text="Discussions" FontSize="13" Padding="8,4"/>
                         <Border Background="#E74C3C" CornerRadius="8" Padding="5,1" Margin="4,0,0,0"
                                 VerticalAlignment="Center"
                                 Visibility="{Binding Comments.NewCount, Converter={StaticResource NotZeroToVis}}">
@@ -363,47 +506,216 @@
                     </StackPanel>
                 </TabItem.Header>
                 <Grid Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="250" MinWidth="180"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="250"/>
+                    </Grid.ColumnDefinitions>
 
-                    <ListBox Grid.Row="0" ItemsSource="{Binding Comments.Comments}"
-                             SelectedItem="{Binding Comments.SelectedComment}"
-                             ItemTemplate="{StaticResource ActivityCardTemplate}"
+                    <!-- Left: Watched discussion list -->
+                    <ListBox Grid.Column="0" ItemsSource="{Binding Comments.Discussions}"
+                             SelectedItem="{Binding Comments.SelectedDiscussion}"
+                             ItemTemplate="{StaticResource WatchedDiscussionTemplate}"
                              BorderThickness="0" Background="Transparent"
                              HorizontalContentAlignment="Stretch"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             SelectionChanged="DiscussionList_SelectionChanged"/>
 
-                    <!-- Reply panel -->
-                    <Border Grid.Row="1" BorderBrush="#DEE2E6" BorderThickness="0,1,0,0" Padding="0,8,0,0"
-                            Visibility="{Binding Comments.SelectedComment, Converter={StaticResource NotNullToVis}}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBox Grid.Row="0"
-                                     Text="{Binding Comments.ReplyText, UpdateSourceTrigger=PropertyChanged}"
-                                     AcceptsReturn="True" TextWrapping="Wrap"
-                                     MinHeight="50" MaxHeight="100"
-                                     VerticalScrollBarVisibility="Auto"
-                                     FontSize="12" Padding="8,6"
-                                     BorderBrush="#A5D6A7" BorderThickness="1"
-                                     SpellCheck.IsEnabled="True"/>
-                            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
-                                <TextBlock Text="{Binding Comments.SendError}" Foreground="#E74C3C"
-                                           FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
-                                           Visibility="{Binding Comments.SendError, Converter={StaticResource NotNullToVis}}"/>
-                                <TextBlock Text="Sending..." FontStyle="Italic" Foreground="#3498DB"
-                                           FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
-                                           Visibility="{Binding Comments.IsSending, Converter={StaticResource BoolToVis}}"/>
-                                <Button Content="Reply" Command="{Binding Comments.SendReplyCommand}"
-                                        Background="#27AE60" Foreground="White" Padding="16,6"
-                                        FontWeight="SemiBold" FontSize="12" BorderThickness="0" Cursor="Hand"
-                                        IsEnabled="{Binding Comments.IsSending, Converter={StaticResource InverseBool}}"/>
-                            </StackPanel>
-                        </Grid>
+                    <!-- Splitter -->
+                    <GridSplitter Grid.Column="1" Width="4" Background="#DEE2E6"
+                                  HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                                  Visibility="{Binding Comments.HasDiscussion, Converter={StaticResource BoolToVis}}"/>
+
+                    <!-- Right: Discussion panel -->
+                    <Grid Grid.Column="2"
+                          Visibility="{Binding Comments.HasDiscussion, Converter={StaticResource BoolToVis}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/> <!-- Post header -->
+                            <RowDefinition Height="Auto"/> <!-- Post body -->
+                            <RowDefinition Height="*"/>    <!-- Comments -->
+                            <RowDefinition Height="Auto"/> <!-- Reply panel -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Post header -->
+                        <Border Grid.Row="0" Background="#E3F2FD" Padding="10,8" CornerRadius="4"
+                                BorderBrush="#64B5F6" BorderThickness="1" Margin="4,0,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{Binding Comments.DiscussionTitle}" FontWeight="Bold"
+                                               FontSize="13" Foreground="#1565C0" TextWrapping="Wrap"/>
+                                    <TextBlock FontSize="10" Foreground="#777" Margin="0,2,0,0">
+                                        <Run Text="by "/>
+                                        <Run Text="{Binding Comments.DiscussionAuthor, Mode=OneWay}" FontWeight="SemiBold"/>
+                                    </TextBlock>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Refresh"
+                                        Command="{Binding Comments.RefreshDiscussionCommand}"
+                                        Background="#3498DB" Foreground="White" Padding="8,3"
+                                        FontSize="10" BorderThickness="0" Cursor="Hand" Margin="6,0,0,0"
+                                        VerticalAlignment="Top"/>
+                                <!-- Feature 5: Unsubscribe button -->
+                                <Button Grid.Column="2" Content="Unsub"
+                                        Command="{Binding Comments.UnsubscribeCommand}"
+                                        Background="#E67E22" Foreground="White" Padding="8,3"
+                                        FontSize="10" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"
+                                        VerticalAlignment="Top" ToolTip="Unsubscribe from this discussion"/>
+                                <Button Grid.Column="3" Content="X"
+                                        Click="CloseDiscussionsPanel_Click"
+                                        Background="#E74C3C" Foreground="White" Padding="6,2"
+                                        FontSize="10" FontWeight="Bold" BorderThickness="0" Cursor="Hand"
+                                        Margin="4,0,0,0" VerticalAlignment="Top"
+                                        ToolTip="Close discussion panel"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Post body -->
+                        <Border Grid.Row="1" Background="#FAFAFA" Padding="10,8" Margin="4,4,0,0"
+                                BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="4"
+                                MouseLeftButtonUp="DiscussionsPostBody_MouseLeftButtonUp" Cursor="Hand">
+                            <RichTextBox helpers:MarkdownHelper.MarkdownText="{Binding Comments.DiscussionBody, Mode=OneWay}"
+                                         IsReadOnly="True" IsDocumentEnabled="True"
+                                         BorderThickness="0" Background="Transparent" Padding="0"
+                                         FontSize="12" Foreground="#333" Cursor="IBeam"
+                                         Focusable="True" VerticalScrollBarVisibility="Disabled"
+                                         IsHitTestVisible="{Binding Comments.IsPostBodyExpanded}">
+                                <RichTextBox.Style>
+                                    <Style TargetType="RichTextBox">
+                                        <Setter Property="MaxHeight" Value="120"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Comments.IsPostBodyExpanded}" Value="True">
+                                                <Setter Property="MaxHeight" Value="{x:Static system:Double.PositiveInfinity}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </RichTextBox.Style>
+                            </RichTextBox>
+                        </Border>
+
+                        <!-- Comments list -->
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="4,4,0,0">
+                            <ItemsControl ItemsSource="{Binding Comments.DiscussionComments}"
+                                          ItemTemplate="{StaticResource DiscussionCommentTemplate}"/>
+                        </ScrollViewer>
+
+                        <!-- Loading indicator -->
+                        <TextBlock Grid.Row="2" Text="Loading discussion..."
+                                   FontStyle="Italic" Foreground="#3498DB" FontSize="12"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Visibility="{Binding Comments.IsLoadingDiscussion, Converter={StaticResource BoolToVis}}"/>
+
+                        <!-- Reply panel -->
+                        <Border Grid.Row="3" BorderBrush="#DEE2E6" BorderThickness="0,1,0,0"
+                                Padding="4,8,0,0" Margin="4,0,0,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Replying-to indicator -->
+                                <Border Grid.Row="0" Background="#E3F2FD" Padding="6,4" CornerRadius="3"
+                                        Margin="0,0,0,4"
+                                        Visibility="{Binding Comments.ReplyToComment, Converter={StaticResource NotNullToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontSize="10" Foreground="#1565C0" VerticalAlignment="Center">
+                                            <Run Text="Replying to "/>
+                                            <Run Text="{Binding Comments.ReplyToComment.Author, Mode=OneWay}" FontWeight="SemiBold"/>
+                                        </TextBlock>
+                                        <Button Content="X" Click="CancelDiscussionsReplyTo_Click"
+                                                FontSize="9" Padding="4,1" Margin="8,0,0,0"
+                                                Background="Transparent" Foreground="#E74C3C"
+                                                BorderBrush="#E74C3C" BorderThickness="1"
+                                                Cursor="Hand" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Reply text + AI assist -->
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding Comments.DiscussionReplyText, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True" TextWrapping="Wrap"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontSize="12" Padding="8,6"
+                                             BorderBrush="#64B5F6" BorderThickness="1"
+                                             SpellCheck.IsEnabled="True"
+                                             GotFocus="DiscussionsReplyTextBox_GotFocus"
+                                             LostFocus="DiscussionsReplyTextBox_LostFocus">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox">
+                                                <Setter Property="MinHeight" Value="36"/>
+                                                <Setter Property="MaxHeight" Value="60"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Comments.IsReplyExpanded}" Value="True">
+                                                        <Setter Property="MinHeight" Value="100"/>
+                                                        <Setter Property="MaxHeight" Value="200"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+                                    <!-- Feature 7: AI Assist button -->
+                                    <Button Grid.Column="1" Content="AI" FontSize="10" FontWeight="Bold"
+                                            Padding="6,4" Margin="4,0,0,0" Cursor="Hand"
+                                            Background="#8E44AD" Foreground="White" BorderThickness="0"
+                                            VerticalAlignment="Top" ToolTip="AI Writing Assist"
+                                            Click="AiAssist_DiscussionsReply_Click"/>
+                                </Grid>
+
+                                <StackPanel Grid.Row="2" Orientation="Horizontal"
+                                            HorizontalAlignment="Right" Margin="0,6,0,0">
+                                    <TextBlock Text="{Binding Comments.DiscussionSendError}" Foreground="#E74C3C"
+                                               FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Visibility="{Binding Comments.DiscussionSendError, Converter={StaticResource NotNullToVis}}"/>
+                                    <TextBlock Text="Sending..." FontStyle="Italic" Foreground="#3498DB"
+                                               FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Visibility="{Binding Comments.IsSendingDiscussionReply, Converter={StaticResource BoolToVis}}"/>
+                                    <Button Command="{Binding Comments.SendDiscussionReplyCommand}"
+                                            Background="#3498DB" Foreground="White" Padding="16,6"
+                                            FontWeight="SemiBold" FontSize="12" BorderThickness="0" Cursor="Hand"
+                                            IsEnabled="{Binding Comments.IsSendingDiscussionReply, Converter={StaticResource InverseBool}}">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Content" Value="Reply"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Comments.ReplyToComment, Converter={StaticResource NotNullToVis}}" Value="Visible">
+                                                        <Setter Property="Content" Value="Reply to Thread"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Placeholder when no discussion is selected -->
+                    <Border Grid.Column="2" Margin="4,0,0,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Comments.HasDiscussion}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="Select a discussion from the list to view its thread"
+                                   FontSize="12" Foreground="#999" FontStyle="Italic"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" TextAlignment="Center" Padding="20"/>
                     </Border>
                 </Grid>
             </TabItem>
@@ -430,7 +742,7 @@
                 </Grid>
             </TabItem>
 
-            <!-- Feed Tab -->
+            <!-- ═══ Feed Tab (Feature 4: split view with discussion panel) ═══ -->
             <TabItem>
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
@@ -443,86 +755,299 @@
                     </StackPanel>
                 </TabItem.Header>
                 <Grid Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>  <!-- Compose button / form -->
-                        <RowDefinition Height="*"/>     <!-- Post list -->
-                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="250"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="250"/>
+                    </Grid.ColumnDefinitions>
 
-                    <!-- Compose area -->
-                    <StackPanel Grid.Row="0" Margin="0,0,0,8">
-                        <!-- New Post button (hidden when composing) -->
-                        <Button Content="＋ New Post"
-                                Command="{Binding Feed.ShowComposeCommand}"
-                                Background="#2980B9" Foreground="White" Padding="12,6"
-                                FontSize="12" FontWeight="SemiBold" BorderThickness="0"
-                                Cursor="Hand" HorizontalAlignment="Left">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Feed.IsComposing}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
+                    <!-- Left: Compose + Feed list -->
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-                        <!-- Compose form (shown when IsComposing is true) -->
-                        <Border Background="#E8F4FD" Padding="10" CornerRadius="4"
-                                BorderBrush="#64B5F6" BorderThickness="1"
-                                Visibility="{Binding Feed.IsComposing, Converter={StaticResource BoolToVis}}">
-                            <StackPanel>
-                                <TextBlock Text="New Post" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="#1565C0" Margin="0,0,0,6"/>
-                                <TextBlock Text="Title" FontSize="11" Foreground="#555" Margin="0,0,0,2"/>
-                                <TextBox Text="{Binding Feed.NewPostTitle, UpdateSourceTrigger=PropertyChanged}"
-                                         FontSize="12" Padding="8,6" Margin="0,0,0,6"
-                                         BorderBrush="#64B5F6" BorderThickness="1"
-                                         SpellCheck.IsEnabled="True"/>
-                                <TextBlock Text="Body" FontSize="11" Foreground="#555" Margin="0,0,0,2"/>
-                                <TextBox Text="{Binding Feed.NewPostBody, UpdateSourceTrigger=PropertyChanged}"
-                                         AcceptsReturn="True" TextWrapping="Wrap"
-                                         MinHeight="100" MaxHeight="250"
-                                         VerticalScrollBarVisibility="Auto"
-                                         FontSize="12" Padding="8,6" Margin="0,0,0,6"
-                                         BorderBrush="#64B5F6" BorderThickness="1"
-                                         SpellCheck.IsEnabled="True"/>
-                                <TextBlock Text="Tags (1-5 comma delimited)" FontSize="11" Foreground="#555" Margin="0,0,0,2"/>
-                                <TextBox Text="{Binding Feed.NewPostTags, UpdateSourceTrigger=PropertyChanged}"
-                                         FontSize="12" Padding="8,6" Margin="0,0,0,6"
-                                         BorderBrush="#64B5F6" BorderThickness="1"/>
-                                <TextBlock Text="{Binding Feed.PostError}" Foreground="#E74C3C"
-                                           FontSize="11" Margin="0,0,0,4" TextWrapping="Wrap"
-                                           Visibility="{Binding Feed.PostError, Converter={StaticResource NotNullToVis}}"/>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <TextBlock Text="Posting..." FontStyle="Italic" Foreground="#3498DB"
-                                               FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
-                                               Visibility="{Binding Feed.IsPosting, Converter={StaticResource BoolToVis}}"/>
-                                    <Button Content="Cancel"
-                                            Command="{Binding Feed.CancelComposeCommand}"
-                                            FontSize="11" Padding="10,4" Margin="0,0,6,0"
-                                            Cursor="Hand"/>
-                                    <Button Content="Post"
-                                            Command="{Binding Feed.CreatePostCommand}"
-                                            Background="#2980B9" Foreground="White"
-                                            FontSize="11" FontWeight="SemiBold" Padding="16,4"
-                                            BorderThickness="0" Cursor="Hand"
-                                            IsEnabled="{Binding Feed.IsPosting, Converter={StaticResource InverseBool}}"/>
+                        <!-- Compose area -->
+                        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                            <Button Content="＋ New Post"
+                                    Command="{Binding Feed.ShowComposeCommand}"
+                                    Background="#2980B9" Foreground="White" Padding="12,6"
+                                    FontSize="12" FontWeight="SemiBold" BorderThickness="0"
+                                    Cursor="Hand" HorizontalAlignment="Left">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Feed.IsComposing}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+
+                            <!-- Compose form -->
+                            <Border Background="#E8F4FD" Padding="10" CornerRadius="4"
+                                    BorderBrush="#64B5F6" BorderThickness="1"
+                                    Visibility="{Binding Feed.IsComposing, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="New Post" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="#1565C0" Margin="0,0,0,6"/>
+                                    <TextBlock Text="Title" FontSize="11" Foreground="#555" Margin="0,0,0,2"/>
+                                    <TextBox Text="{Binding Feed.NewPostTitle, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="12" Padding="8,6" Margin="0,0,0,6"
+                                             BorderBrush="#64B5F6" BorderThickness="1"
+                                             SpellCheck.IsEnabled="True"/>
+                                    <TextBlock Text="Body" FontSize="11" Foreground="#555" Margin="0,0,0,2"/>
+                                    <!-- Feature 7: Body box + AI assist -->
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" x:Name="FeedComposeBodyBox"
+                                                 Text="{Binding Feed.NewPostBody, UpdateSourceTrigger=PropertyChanged}"
+                                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                                 MinHeight="100" MaxHeight="250"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 FontSize="12" Padding="8,6"
+                                                 BorderBrush="#64B5F6" BorderThickness="1"
+                                                 SpellCheck.IsEnabled="True"/>
+                                        <Button Grid.Column="1" Content="AI" FontSize="10" FontWeight="Bold"
+                                                Padding="6,4" Margin="4,0,0,0" Cursor="Hand"
+                                                Background="#8E44AD" Foreground="White" BorderThickness="0"
+                                                VerticalAlignment="Top" ToolTip="AI Writing Assist"
+                                                Click="AiAssist_FeedCompose_Click"/>
+                                    </Grid>
+                                    <TextBlock Text="Tags (1-5 comma delimited)" FontSize="11" Foreground="#555" Margin="0,0,0,2"/>
+                                    <TextBox Text="{Binding Feed.NewPostTags, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="12" Padding="8,6" Margin="0,0,0,6"
+                                             BorderBrush="#64B5F6" BorderThickness="1"/>
+                                    <TextBlock Text="{Binding Feed.PostError}" Foreground="#E74C3C"
+                                               FontSize="11" Margin="0,0,0,4" TextWrapping="Wrap"
+                                               Visibility="{Binding Feed.PostError, Converter={StaticResource NotNullToVis}}"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <TextBlock Text="Posting..." FontStyle="Italic" Foreground="#3498DB"
+                                                   FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                   Visibility="{Binding Feed.IsPosting, Converter={StaticResource BoolToVis}}"/>
+                                        <Button Content="Cancel"
+                                                Command="{Binding Feed.CancelComposeCommand}"
+                                                FontSize="11" Padding="10,4" Margin="0,0,6,0" Cursor="Hand"/>
+                                        <Button Content="Post"
+                                                Command="{Binding Feed.CreatePostCommand}"
+                                                Background="#2980B9" Foreground="White"
+                                                FontSize="11" FontWeight="SemiBold" Padding="16,4"
+                                                BorderThickness="0" Cursor="Hand"
+                                                IsEnabled="{Binding Feed.IsPosting, Converter={StaticResource InverseBool}}"/>
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
+                            </Border>
+                        </StackPanel>
 
-                    <ListBox Grid.Row="1" ItemsSource="{Binding Feed.Posts}"
-                             SelectedItem="{Binding Feed.SelectedPost}"
-                             ItemTemplate="{StaticResource ActivityCardTemplate}"
-                             BorderThickness="0" Background="Transparent"
-                             HorizontalContentAlignment="Stretch"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                        <ListBox Grid.Row="1" ItemsSource="{Binding Feed.Posts}"
+                                 SelectedItem="{Binding Feed.SelectedPost}"
+                                 ItemTemplate="{StaticResource ActivityCardTemplate}"
+                                 BorderThickness="0" Background="Transparent"
+                                 HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 SelectionChanged="FeedList_SelectionChanged"/>
+                    </Grid>
+
+                    <!-- Splitter -->
+                    <GridSplitter Grid.Column="1" Width="4" Background="#DEE2E6"
+                                  HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                                  Visibility="{Binding Feed.HasDiscussion, Converter={StaticResource BoolToVis}}"/>
+
+                    <!-- Right: Discussion panel (same pattern as WhatsNew/Discussions) -->
+                    <Grid Grid.Column="2"
+                          Visibility="{Binding Feed.HasDiscussion, Converter={StaticResource BoolToVis}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Post header -->
+                        <Border Grid.Row="0" Background="#E3F2FD" Padding="10,8" CornerRadius="4"
+                                BorderBrush="#64B5F6" BorderThickness="1" Margin="4,0,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{Binding Feed.DiscussionTitle}" FontWeight="Bold"
+                                               FontSize="13" Foreground="#1565C0" TextWrapping="Wrap"/>
+                                    <TextBlock FontSize="10" Foreground="#777" Margin="0,2,0,0">
+                                        <Run Text="by "/>
+                                        <Run Text="{Binding Feed.DiscussionAuthor, Mode=OneWay}" FontWeight="SemiBold"/>
+                                    </TextBlock>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="Refresh"
+                                        Command="{Binding Feed.RefreshFeedDiscussionCommand}"
+                                        Background="#3498DB" Foreground="White" Padding="8,3"
+                                        FontSize="10" BorderThickness="0" Cursor="Hand" Margin="6,0,0,0"
+                                        VerticalAlignment="Top"/>
+                                <!-- Feature 4: Subscribe button -->
+                                <Button Grid.Column="2" Content="Subscribe"
+                                        Command="{Binding Feed.SubscribeCommand}"
+                                        Background="#27AE60" Foreground="White" Padding="8,3"
+                                        FontSize="10" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"
+                                        VerticalAlignment="Top" ToolTip="Subscribe to this post (add to Discussions)"/>
+                                <Button Grid.Column="3" Content="X"
+                                        Click="CloseFeedDiscussion_Click"
+                                        Background="#E74C3C" Foreground="White" Padding="6,2"
+                                        FontSize="10" FontWeight="Bold" BorderThickness="0" Cursor="Hand"
+                                        Margin="4,0,0,0" VerticalAlignment="Top"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Post body -->
+                        <Border Grid.Row="1" Background="#FAFAFA" Padding="10,8" Margin="4,4,0,0"
+                                BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="4"
+                                MouseLeftButtonUp="FeedPostBody_MouseLeftButtonUp" Cursor="Hand">
+                            <RichTextBox helpers:MarkdownHelper.MarkdownText="{Binding Feed.DiscussionBody, Mode=OneWay}"
+                                         IsReadOnly="True" IsDocumentEnabled="True"
+                                         BorderThickness="0" Background="Transparent" Padding="0"
+                                         FontSize="12" Foreground="#333" Cursor="IBeam"
+                                         Focusable="True" VerticalScrollBarVisibility="Disabled"
+                                         IsHitTestVisible="{Binding Feed.IsPostBodyExpanded}">
+                                <RichTextBox.Style>
+                                    <Style TargetType="RichTextBox">
+                                        <Setter Property="MaxHeight" Value="120"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Feed.IsPostBodyExpanded}" Value="True">
+                                                <Setter Property="MaxHeight" Value="{x:Static system:Double.PositiveInfinity}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </RichTextBox.Style>
+                            </RichTextBox>
+                        </Border>
+
+                        <!-- Comments list -->
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="4,4,0,0">
+                            <ItemsControl ItemsSource="{Binding Feed.DiscussionComments}"
+                                          ItemTemplate="{StaticResource DiscussionCommentTemplate}"/>
+                        </ScrollViewer>
+
+                        <TextBlock Grid.Row="2" Text="Loading discussion..."
+                                   FontStyle="Italic" Foreground="#3498DB" FontSize="12"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Visibility="{Binding Feed.IsLoadingDiscussion, Converter={StaticResource BoolToVis}}"/>
+
+                        <!-- Reply panel -->
+                        <Border Grid.Row="3" BorderBrush="#DEE2E6" BorderThickness="0,1,0,0"
+                                Padding="4,8,0,0" Margin="4,0,0,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Border Grid.Row="0" Background="#E3F2FD" Padding="6,4" CornerRadius="3"
+                                        Margin="0,0,0,4"
+                                        Visibility="{Binding Feed.ReplyToComment, Converter={StaticResource NotNullToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontSize="10" Foreground="#1565C0" VerticalAlignment="Center">
+                                            <Run Text="Replying to "/>
+                                            <Run Text="{Binding Feed.ReplyToComment.Author, Mode=OneWay}" FontWeight="SemiBold"/>
+                                        </TextBlock>
+                                        <Button Content="X" Click="CancelFeedReplyTo_Click"
+                                                FontSize="9" Padding="4,1" Margin="8,0,0,0"
+                                                Background="Transparent" Foreground="#E74C3C"
+                                                BorderBrush="#E74C3C" BorderThickness="1"
+                                                Cursor="Hand" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding Feed.DiscussionReplyText, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True" TextWrapping="Wrap"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontSize="12" Padding="8,6"
+                                             BorderBrush="#64B5F6" BorderThickness="1"
+                                             SpellCheck.IsEnabled="True"
+                                             GotFocus="FeedReplyTextBox_GotFocus"
+                                             LostFocus="FeedReplyTextBox_LostFocus">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox">
+                                                <Setter Property="MinHeight" Value="36"/>
+                                                <Setter Property="MaxHeight" Value="60"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Feed.IsReplyExpanded}" Value="True">
+                                                        <Setter Property="MinHeight" Value="100"/>
+                                                        <Setter Property="MaxHeight" Value="200"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+                                    <Button Grid.Column="1" Content="AI" FontSize="10" FontWeight="Bold"
+                                            Padding="6,4" Margin="4,0,0,0" Cursor="Hand"
+                                            Background="#8E44AD" Foreground="White" BorderThickness="0"
+                                            VerticalAlignment="Top" ToolTip="AI Writing Assist"
+                                            Click="AiAssist_FeedReply_Click"/>
+                                </Grid>
+
+                                <StackPanel Grid.Row="2" Orientation="Horizontal"
+                                            HorizontalAlignment="Right" Margin="0,6,0,0">
+                                    <TextBlock Text="{Binding Feed.DiscussionSendError}" Foreground="#E74C3C"
+                                               FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Visibility="{Binding Feed.DiscussionSendError, Converter={StaticResource NotNullToVis}}"/>
+                                    <TextBlock Text="Sending..." FontStyle="Italic" Foreground="#3498DB"
+                                               FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Visibility="{Binding Feed.IsSendingDiscussionReply, Converter={StaticResource BoolToVis}}"/>
+                                    <Button Command="{Binding Feed.SendFeedReplyCommand}"
+                                            Background="#3498DB" Foreground="White" Padding="16,6"
+                                            FontWeight="SemiBold" FontSize="12" BorderThickness="0" Cursor="Hand"
+                                            IsEnabled="{Binding Feed.IsSendingDiscussionReply, Converter={StaticResource InverseBool}}">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Content" Value="Reply"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Feed.ReplyToComment, Converter={StaticResource NotNullToVis}}" Value="Visible">
+                                                        <Setter Property="Content" Value="Reply to Thread"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Placeholder when no discussion is selected -->
+                    <Border Grid.Column="2" Margin="4,0,0,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Feed.HasDiscussion}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="Click a post to see its discussion"
+                                   FontSize="12" Foreground="#999" FontStyle="Italic"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" TextAlignment="Center" Padding="20"/>
+                    </Border>
                 </Grid>
             </TabItem>
 
-            <!-- Channels Tab -->
+            <!-- ═══ Channels Tab (Feature 8: threaded messages) ═══ -->
             <TabItem>
                 <TabItem.Header>
                     <StackPanel Orientation="Horizontal">
@@ -587,7 +1112,7 @@
                             </Button.Style>
                         </Button>
 
-                        <!-- Create channel inline form (shown when IsCreatingChannel is true) -->
+                        <!-- Create channel form -->
                         <Border Grid.Row="2" Background="#F3E5F5" Padding="6" CornerRadius="4"
                                 Margin="0,4,8,0" BorderBrush="#CE93D8" BorderThickness="1"
                                 Visibility="{Binding Channels.IsCreatingChannel, Converter={StaticResource BoolToVis}}">
@@ -612,8 +1137,7 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button Content="Cancel"
                                             Command="{Binding Channels.CancelCreateChannelCommand}"
-                                            FontSize="10" Padding="8,3" Margin="0,0,4,0"
-                                            Cursor="Hand"/>
+                                            FontSize="10" Padding="8,3" Margin="0,0,4,0" Cursor="Hand"/>
                                     <Button Content="Create"
                                             Command="{Binding Channels.CreateChannelCommand}"
                                             Background="#9C27B0" Foreground="White"
@@ -625,16 +1149,17 @@
                         </Border>
                     </Grid>
 
-                    <!-- Channel messages + reply -->
+                    <!-- Channel messages (Feature 8: threaded view) + reply -->
                     <Grid Grid.Column="1">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
+                        <!-- Threaded messages -->
                         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
-                            <ItemsControl ItemsSource="{Binding Channels.SelectedChannel.Messages}"
-                                          ItemTemplate="{StaticResource ActivityCardTemplate}"/>
+                            <ItemsControl ItemsSource="{Binding Channels.SelectedChannel.ThreadedMessages}"
+                                          ItemTemplate="{StaticResource DiscussionCommentTemplate}"/>
                         </ScrollViewer>
 
                         <!-- Reply panel -->
@@ -642,18 +1167,49 @@
                                 Visibility="{Binding Channels.SelectedChannel, Converter={StaticResource NotNullToVis}}">
                             <Grid>
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/> <!-- Reply-to indicator -->
+                                    <RowDefinition Height="Auto"/> <!-- TextBox + AI button -->
+                                    <RowDefinition Height="Auto"/> <!-- Buttons -->
                                 </Grid.RowDefinitions>
-                                <TextBox Grid.Row="0"
-                                         Text="{Binding Channels.ReplyText, UpdateSourceTrigger=PropertyChanged}"
-                                         AcceptsReturn="True" TextWrapping="Wrap"
-                                         MinHeight="50" MaxHeight="100"
-                                         VerticalScrollBarVisibility="Auto"
-                                         FontSize="12" Padding="8,6"
-                                         BorderBrush="#CE93D8" BorderThickness="1"
-                                         SpellCheck.IsEnabled="True"/>
-                                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+
+                                <!-- Reply-to indicator (Feature 8) -->
+                                <Border Grid.Row="0" Background="#F3E5F5" Padding="6,4" CornerRadius="3"
+                                        Margin="0,0,0,4"
+                                        Visibility="{Binding Channels.ReplyToMessage, Converter={StaticResource NotNullToVis}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock FontSize="10" Foreground="#9C27B0" VerticalAlignment="Center">
+                                            <Run Text="Replying to "/>
+                                            <Run Text="{Binding Channels.ReplyToMessage.Author, Mode=OneWay}" FontWeight="SemiBold"/>
+                                        </TextBlock>
+                                        <Button Content="X" Click="CancelChannelReplyTo_Click"
+                                                FontSize="9" Padding="4,1" Margin="8,0,0,0"
+                                                Background="Transparent" Foreground="#E74C3C"
+                                                BorderBrush="#E74C3C" BorderThickness="1"
+                                                Cursor="Hand" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding Channels.ReplyText, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True" TextWrapping="Wrap"
+                                             MinHeight="50" MaxHeight="100"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontSize="12" Padding="8,6"
+                                             BorderBrush="#CE93D8" BorderThickness="1"
+                                             SpellCheck.IsEnabled="True"/>
+                                    <Button Grid.Column="1" Content="AI" FontSize="10" FontWeight="Bold"
+                                            Padding="6,4" Margin="4,0,0,0" Cursor="Hand"
+                                            Background="#8E44AD" Foreground="White" BorderThickness="0"
+                                            VerticalAlignment="Top" ToolTip="AI Writing Assist"
+                                            Click="AiAssist_Channel_Click"/>
+                                </Grid>
+
+                                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
                                     <TextBlock Text="{Binding Channels.SendError}" Foreground="#E74C3C"
                                                FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
                                                Visibility="{Binding Channels.SendError, Converter={StaticResource NotNullToVis}}"/>
@@ -723,7 +1279,7 @@
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  SelectionChanged="WhatsNewList_SelectionChanged"/>
 
-                        <!-- Splitter (only visible when discussion is open) -->
+                        <!-- Splitter -->
                         <GridSplitter Grid.Column="1" Width="4" Background="#DEE2E6"
                                       HorizontalAlignment="Center" VerticalAlignment="Stretch"
                                       Visibility="{Binding WhatsNew.HasDiscussion, Converter={StaticResource BoolToVis}}"/>
@@ -732,10 +1288,10 @@
                         <Grid Grid.Column="2"
                               Visibility="{Binding WhatsNew.HasDiscussion, Converter={StaticResource BoolToVis}}">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/> <!-- Post header -->
-                                <RowDefinition Height="Auto"/> <!-- Post body -->
-                                <RowDefinition Height="*"/>    <!-- Comments -->
-                                <RowDefinition Height="Auto"/> <!-- Reply panel -->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <!-- Post header -->
@@ -769,18 +1325,18 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Post body (click to expand/collapse, text is selectable when expanded) -->
+                            <!-- Post body -->
                             <Border Grid.Row="1" Background="#FAFAFA" Padding="10,8" Margin="4,4,0,0"
                                     BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="4"
                                     MouseLeftButtonUp="PostBody_MouseLeftButtonUp" Cursor="Hand">
-                                <TextBox Text="{Binding WhatsNew.DiscussionBody, Mode=OneWay}" TextWrapping="Wrap"
-                                         IsReadOnly="True" IsReadOnlyCaretVisible="True"
-                                         BorderThickness="0" Background="Transparent" Padding="0"
-                                         FontSize="12" Foreground="#333" Cursor="IBeam"
-                                         Focusable="True" VerticalScrollBarVisibility="Disabled"
-                                         IsHitTestVisible="{Binding WhatsNew.IsPostBodyExpanded}">
-                                    <TextBox.Style>
-                                        <Style TargetType="TextBox">
+                                <RichTextBox helpers:MarkdownHelper.MarkdownText="{Binding WhatsNew.DiscussionBody, Mode=OneWay}"
+                                             IsReadOnly="True" IsDocumentEnabled="True"
+                                             BorderThickness="0" Background="Transparent" Padding="0"
+                                             FontSize="12" Foreground="#333" Cursor="IBeam"
+                                             Focusable="True" VerticalScrollBarVisibility="Disabled"
+                                             IsHitTestVisible="{Binding WhatsNew.IsPostBodyExpanded}">
+                                    <RichTextBox.Style>
+                                        <Style TargetType="RichTextBox">
                                             <Setter Property="MaxHeight" Value="120"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding WhatsNew.IsPostBodyExpanded}" Value="True">
@@ -788,88 +1344,16 @@
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </TextBox.Style>
-                                </TextBox>
+                                    </RichTextBox.Style>
+                                </RichTextBox>
                             </Border>
 
                             <!-- Comments list -->
                             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="4,4,0,0">
-                                <ItemsControl ItemsSource="{Binding WhatsNew.DiscussionComments}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type vm:DiscussionComment}">
-                                            <Border Padding="8,6" CornerRadius="4" Cursor="Hand"
-                                                    Margin="{Binding IndentLevel, Converter={StaticResource IndentToMargin}}"
-                                                    MouseLeftButtonUp="DiscussionComment_MouseLeftButtonUp">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="#F5F5F5"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IndentLevel}" Value="0">
-                                                                <Setter Property="Background" Value="#FFFFFF"/>
-                                                                <Setter Property="BorderBrush" Value="#E0E0E0"/>
-                                                                <Setter Property="BorderThickness" Value="1"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
-                                                    </Grid.RowDefinitions>
-                                                    <!-- Header -->
-                                                    <Grid Grid.Row="0">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                                            <TextBlock Text="{Binding Author}" FontWeight="SemiBold"
-                                                                       FontSize="11" Foreground="#1565C0" Margin="0,0,8,0"/>
-                                                            <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
-                                                                       FontSize="10" Foreground="#999"/>
-                                                        </StackPanel>
-                                                        <!-- Reply to this comment button -->
-                                                        <Button Grid.Column="1" Content="Reply"
-                                                                Click="ReplyToComment_Click"
-                                                                FontSize="9" Padding="6,1"
-                                                                Background="Transparent" Foreground="#3498DB"
-                                                                BorderBrush="#3498DB" BorderThickness="1"
-                                                                Cursor="Hand" VerticalAlignment="Center"/>
-                                                    </Grid>
-                                                    <TextBox Grid.Row="1" TextWrapping="Wrap"
-                                                             IsReadOnly="True" IsReadOnlyCaretVisible="True"
-                                                             BorderThickness="0" Background="Transparent" Padding="0"
-                                                             FontSize="12" Foreground="#333" Margin="0,2,0,0"
-                                                             Cursor="IBeam" Focusable="True"
-                                                             IsHitTestVisible="{Binding IsExpanded}"
-                                                             VerticalScrollBarVisibility="Disabled">
-                                                        <TextBox.Text>
-                                                            <MultiBinding Converter="{StaticResource AuthorBodyFormatter}">
-                                                                <Binding Path="Author"/>
-                                                                <Binding Path="Body"/>
-                                                            </MultiBinding>
-                                                        </TextBox.Text>
-                                                        <TextBox.Style>
-                                                            <Style TargetType="TextBox">
-                                                                <Setter Property="MaxHeight" Value="80"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                                        <Setter Property="MaxHeight" Value="{x:Static system:Double.PositiveInfinity}"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBox.Style>
-                                                    </TextBox>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <ItemsControl ItemsSource="{Binding WhatsNew.DiscussionComments}"
+                                              ItemTemplate="{StaticResource DiscussionCommentTemplate}"/>
                             </ScrollViewer>
 
-                            <!-- Loading indicator -->
                             <TextBlock Grid.Row="2" Text="Loading discussion..."
                                        FontStyle="Italic" Foreground="#3498DB" FontSize="12"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -880,9 +1364,9 @@
                                     Padding="4,8,0,0" Margin="4,0,0,0">
                                 <Grid>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/> <!-- Reply-to indicator -->
-                                        <RowDefinition Height="Auto"/> <!-- TextBox -->
-                                        <RowDefinition Height="Auto"/> <!-- Buttons -->
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
                                     <!-- Replying-to indicator -->
@@ -903,28 +1387,41 @@
                                         </StackPanel>
                                     </Border>
 
-                                    <TextBox Grid.Row="1"
-                                             Text="{Binding WhatsNew.ReplyText, UpdateSourceTrigger=PropertyChanged}"
-                                             AcceptsReturn="True" TextWrapping="Wrap"
-                                             VerticalScrollBarVisibility="Auto"
-                                             FontSize="12" Padding="8,6"
-                                             BorderBrush="#64B5F6" BorderThickness="1"
-                                             SpellCheck.IsEnabled="True"
-                                             GotFocus="ReplyTextBox_GotFocus"
-                                             LostFocus="ReplyTextBox_LostFocus">
-                                        <TextBox.Style>
-                                            <Style TargetType="TextBox">
-                                                <Setter Property="MinHeight" Value="36"/>
-                                                <Setter Property="MaxHeight" Value="60"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding WhatsNew.IsReplyExpanded}" Value="True">
-                                                        <Setter Property="MinHeight" Value="100"/>
-                                                        <Setter Property="MaxHeight" Value="200"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBox.Style>
-                                    </TextBox>
+                                    <Grid Grid.Row="1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding WhatsNew.ReplyText, UpdateSourceTrigger=PropertyChanged}"
+                                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 FontSize="12" Padding="8,6"
+                                                 BorderBrush="#64B5F6" BorderThickness="1"
+                                                 SpellCheck.IsEnabled="True"
+                                                 GotFocus="ReplyTextBox_GotFocus"
+                                                 LostFocus="ReplyTextBox_LostFocus">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox">
+                                                    <Setter Property="MinHeight" Value="36"/>
+                                                    <Setter Property="MaxHeight" Value="60"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding WhatsNew.IsReplyExpanded}" Value="True">
+                                                            <Setter Property="MinHeight" Value="100"/>
+                                                            <Setter Property="MaxHeight" Value="200"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                        <!-- Feature 7: AI Assist button -->
+                                        <Button Grid.Column="1" Content="AI" FontSize="10" FontWeight="Bold"
+                                                Padding="6,4" Margin="4,0,0,0" Cursor="Hand"
+                                                Background="#8E44AD" Foreground="White" BorderThickness="0"
+                                                VerticalAlignment="Top" ToolTip="AI Writing Assist"
+                                                Click="AiAssist_WhatsNewReply_Click"/>
+                                    </Grid>
+
                                     <StackPanel Grid.Row="2" Orientation="Horizontal"
                                                 HorizontalAlignment="Right" Margin="0,6,0,0">
                                         <TextBlock Text="{Binding WhatsNew.SendError}" Foreground="#E74C3C"

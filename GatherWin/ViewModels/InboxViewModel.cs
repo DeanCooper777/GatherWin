@@ -26,6 +26,7 @@ public partial class InboxViewModel : ObservableObject
             Body = body,
             Timestamp = timestamp,
             IsNew = isNew,
+            MarkedNewAt = isNew ? DateTimeOffset.Now : default,
             PostId = postId,
             CommentId = commentId,
             ChannelId = channelId
