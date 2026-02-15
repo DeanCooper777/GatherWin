@@ -433,25 +433,26 @@ public class PollingService
             {
                 var isFirstSeed = _seedPollsRemaining == 2;
                 AppLogger.Log("Poll", $"Seeding {messages.Count} messages from #{channelName}");
+
+                // Track all message IDs for dedup
                 foreach (var m in messages)
-                {
                     if (m.Id is not null) seenIds.Add(m.Id);
 
-                    // Only populate the UI on the very first seed poll
-                    if (isFirstSeed)
+                // Emit to UI in chronological order (oldest first) for chat-style display
+                var uiMessages = isFirstSeed ? messages.AsEnumerable().Reverse() : [];
+                foreach (var m in uiMessages)
+                {
+                    NewChannelMessageReceived?.Invoke(this, new ChannelMessageEventArgs
                     {
-                        NewChannelMessageReceived?.Invoke(this, new ChannelMessageEventArgs
-                        {
-                            ChannelId = channel.Id,
-                            ChannelName = channelName,
-                            MessageId = m.Id ?? "",
-                            Author = m.AuthorName ?? m.AuthorId ?? "unknown",
-                            Body = m.Body ?? "(empty)",
-                            Timestamp = ParseTimestamp(m.Created),
-                            IsInitialLoad = true,
-                            ReplyTo = m.ReplyTo
-                        });
-                    }
+                        ChannelId = channel.Id,
+                        ChannelName = channelName,
+                        MessageId = m.Id ?? "",
+                        Author = m.AuthorName ?? m.AuthorId ?? "unknown",
+                        Body = m.Body ?? "(empty)",
+                        Timestamp = ParseTimestamp(m.Created),
+                        IsInitialLoad = true,
+                        ReplyTo = m.ReplyTo
+                    });
                 }
                 continue;
             }
