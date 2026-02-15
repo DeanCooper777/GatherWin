@@ -479,7 +479,10 @@ public class PollingService
             }
         }
 
-        _channelSinceTimestamp = DateTimeOffset.UtcNow;
+        // Use a 5-minute lookback buffer to avoid missing messages due to
+        // server-side indexing delay (the Gather API may not return newly created
+        // messages immediately in `since` queries). The seenIds set prevents duplicates.
+        _channelSinceTimestamp = DateTimeOffset.UtcNow.AddMinutes(-5);
     }
 
     private static DateTimeOffset ParseTimestamp(string? ts)
