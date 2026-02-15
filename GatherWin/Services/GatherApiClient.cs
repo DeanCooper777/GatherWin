@@ -59,6 +59,25 @@ public class GatherApiClient
                 response = await _http.SendAsync(retry, ct);
             }
 
+            // Retry on rate-limit (429) with exponential backoff
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                for (int attempt = 1; attempt <= 3; attempt++)
+                {
+                    var delay = attempt * 2; // 2s, 4s, 6s
+                    AppLogger.Log("API", $"GET {url} → 429, retrying in {delay}s (attempt {attempt}/3)");
+                    await Task.Delay(TimeSpan.FromSeconds(delay), ct);
+
+                    using var retryReq = new HttpRequestMessage(HttpMethod.Get, $"{GatherBaseUrl}{url}");
+                    retryReq.Headers.Authorization =
+                        new AuthenticationHeaderValue("Bearer", _auth.Token);
+                    response = await _http.SendAsync(retryReq, ct);
+
+                    if (response.StatusCode != HttpStatusCode.TooManyRequests)
+                        break;
+                }
+            }
+
             AppLogger.Log("API", $"GET {url} → {(int)response.StatusCode}");
             return response;
         }
@@ -141,6 +160,26 @@ public class GatherApiClient
                     new AuthenticationHeaderValue("Bearer", _auth.Token);
                 retry.Content = JsonContent.Create(body, options: _jsonOpts);
                 response = await _http.SendAsync(retry, ct);
+            }
+
+            // Retry on rate-limit (429) with exponential backoff
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                for (int attempt = 1; attempt <= 3; attempt++)
+                {
+                    var delay = attempt * 2;
+                    AppLogger.Log("API", $"POST {url} → 429, retrying in {delay}s (attempt {attempt}/3)");
+                    await Task.Delay(TimeSpan.FromSeconds(delay), ct);
+
+                    using var retryReq = new HttpRequestMessage(HttpMethod.Post, $"{GatherBaseUrl}{url}");
+                    retryReq.Headers.Authorization =
+                        new AuthenticationHeaderValue("Bearer", _auth.Token);
+                    retryReq.Content = JsonContent.Create(body, options: _jsonOpts);
+                    response = await _http.SendAsync(retryReq, ct);
+
+                    if (response.StatusCode != HttpStatusCode.TooManyRequests)
+                        break;
+                }
             }
 
             AppLogger.Log("API", $"POST {url} → {(int)response.StatusCode}");
