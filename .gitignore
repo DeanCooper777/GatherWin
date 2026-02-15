@@ -57,3 +57,5 @@ Desktop.ini
 *.msix
 *.msm
 *.msp
+/__pycache__
+/.claude
