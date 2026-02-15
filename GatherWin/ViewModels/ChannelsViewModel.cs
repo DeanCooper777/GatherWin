@@ -390,7 +390,17 @@ public partial class ChannelsViewModel : ObservableObject
             }
             else
             {
-                channel.ThreadedMessages.Add(threadedMsg);
+                // Insert chronologically (oldest first, newest at bottom) for chat-style order
+                int pos = channel.ThreadedMessages.Count;
+                for (int i = 0; i < channel.ThreadedMessages.Count; i++)
+                {
+                    if (channel.ThreadedMessages[i].Timestamp > timestamp && channel.ThreadedMessages[i].IndentLevel == 0)
+                    {
+                        pos = i;
+                        break;
+                    }
+                }
+                channel.ThreadedMessages.Insert(pos, threadedMsg);
             }
 
             if (isNew)

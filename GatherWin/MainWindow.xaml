@@ -173,10 +173,15 @@
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>
-                        <!-- Timestamp -->
-                        <TextBlock Grid.Column="2"
-                                   Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
-                                   FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
+                        <!-- Score + Timestamp -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock FontSize="10" Foreground="#27AE60" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <Run Text="&#x25B2;"/>
+                                <Run Text="{Binding Score, Mode=OneWay}"/>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
+                                       FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </Grid>
 
                     <!-- Body (markdown rendered) -->
