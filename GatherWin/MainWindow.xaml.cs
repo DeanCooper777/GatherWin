@@ -417,6 +417,18 @@ public partial class MainWindow : Window
 
     // ── Edit Messages (Feature 6) ───────────────────────────────────
 
+    private void Upvote_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is ActivityItem item)
+            _ = _viewModel.Feed.VoteAsync(item, 1);
+    }
+
+    private void Downvote_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is ActivityItem item)
+            _ = _viewModel.Feed.VoteAsync(item, -1);
+    }
+
     private void MessageOptions_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.ContextMenu is not null)

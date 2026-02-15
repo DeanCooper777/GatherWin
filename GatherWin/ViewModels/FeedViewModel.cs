@@ -63,6 +63,19 @@ public partial class FeedViewModel : ObservableObject
     [RelayCommand]
     private void ToggleSort() => SortByScore = !SortByScore;
 
+    public async Task VoteAsync(ActivityItem post, int value)
+    {
+        var (success, newScore, error) = await _api.VotePostAsync(post.Id, value, CancellationToken.None);
+        if (success)
+        {
+            Application.Current.Dispatcher.Invoke(() => post.Score = newScore);
+        }
+        else
+        {
+            AppLogger.LogError($"Vote failed on {post.Id}: {error}");
+        }
+    }
+
     public void AddPost(string postId, string author, string title, string body, DateTimeOffset timestamp, bool isNew = true, int score = 0)
     {
         var item = new ActivityItem

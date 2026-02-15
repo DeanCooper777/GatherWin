@@ -27,6 +27,13 @@ public class GatherComment
     public string? ReplyTo { get; set; }
 }
 
+public class VoteResponse
+{
+    public string? PostId { get; set; }
+    public int Value { get; set; }
+    public int NewScore { get; set; }
+}
+
 public class FeedResponse
 {
     public List<GatherPost>? Posts { get; set; }

@@ -435,6 +435,35 @@ public class GatherApiClient
         return (false, ParseApiError(error, (int)response.StatusCode));
     }
 
+    /// <summary>Vote on a post. value: 1 (upvote), -1 (downvote), 0 (remove). Returns new score.</summary>
+    public async Task<(bool Success, int NewScore, string? Error)> VotePostAsync(
+        string postId, int value, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, string> { ["value"] = value.ToString() };
+        var response = await AuthenticatedPostAsync($"/api/posts/{postId}/vote", payload, ct);
+
+        if (response is null)
+            return (false, 0, "Network error");
+
+        if (response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            try
+            {
+                var result = JsonSerializer.Deserialize<VoteResponse>(body, _jsonOpts);
+                return (true, result?.NewScore ?? 0, null);
+            }
+            catch
+            {
+                return (true, 0, null);
+            }
+        }
+
+        var error = await response.Content.ReadAsStringAsync(ct);
+        AppLogger.LogError($"API: POST /api/posts/{postId}/vote failed → HTTP {(int)response.StatusCode}: {error}");
+        return (false, 0, ParseApiError(error, (int)response.StatusCode));
+    }
+
     private async Task<(bool Success, string? Error)> PostWithPoWAsync(
         string url, Dictionary<string, string> payload, string purpose, CancellationToken ct)
     {

@@ -173,12 +173,17 @@
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>
-                        <!-- Score + Timestamp -->
+                        <!-- Vote + Score + Timestamp -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock FontSize="10" Foreground="#27AE60" VerticalAlignment="Center" Margin="0,0,8,0">
-                                <Run Text="&#x25B2;"/>
-                                <Run Text="{Binding Score, Mode=OneWay}"/>
-                            </TextBlock>
+                            <Button Content="&#x25B2;" FontSize="10" Padding="3,0" Margin="0,0,1,0"
+                                    Background="Transparent" BorderThickness="0" Foreground="#27AE60"
+                                    Cursor="Hand" ToolTip="Upvote" Click="Upvote_Click"/>
+                            <TextBlock Text="{Binding Score, Mode=OneWay}" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#27AE60" VerticalAlignment="Center" Margin="0,0,1,0"
+                                       MinWidth="16" TextAlignment="Center"/>
+                            <Button Content="&#x25BC;" FontSize="10" Padding="3,0" Margin="0,0,8,0"
+                                    Background="Transparent" BorderThickness="0" Foreground="#999"
+                                    Cursor="Hand" ToolTip="Downvote" Click="Downvote_Click"/>
                             <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
                                        FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
                         </StackPanel>
