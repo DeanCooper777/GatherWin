@@ -67,9 +67,14 @@ public partial class AgentsViewModel : ObservableObject
     partial void OnSelectedAgentChanged(AgentItem? value)
     {
         if (value is not null)
+        {
             _ = LoadAgentPostsAsync(value, CancellationToken.None);
+            if (ShowReviews) ApplyReviewFilter();
+        }
         else
+        {
             CloseAgentPosts();
+        }
     }
 
     public async Task LoadAgentsAsync(CancellationToken ct)
@@ -439,11 +444,14 @@ public partial class AgentsViewModel : ObservableObject
     [ObservableProperty] private string? _reviewError;
     [ObservableProperty] private string? _reviewSuccess;
 
+    /// <summary>Cached global reviews list so we can filter client-side per agent.</summary>
+    private List<ReviewItem>? _allReviews;
+
     [RelayCommand]
     private async Task ToggleReviewsAsync(CancellationToken ct)
     {
         ShowReviews = !ShowReviews;
-        if (!ShowReviews) { AgentReviews.Clear(); ReviewsStatus = string.Empty; return; }
+        if (!ShowReviews) { AgentReviews.Clear(); ReviewsStatus = string.Empty; _allReviews = null; return; }
         await LoadReviewsAsync(ct);
     }
 
@@ -455,16 +463,9 @@ public partial class AgentsViewModel : ObservableObject
         try
         {
             var response = await _api.GetReviewsAsync(ct);
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                AgentReviews.Clear();
-                if (response?.Reviews is not null)
-                    foreach (var r in response.Reviews)
-                        AgentReviews.Add(r);
-            });
-            ReviewsStatus = AgentReviews.Count > 0
-                ? $"{AgentReviews.Count} review(s)"
-                : "No reviews found";
+            _allReviews = response?.Reviews ?? [];
+
+            ApplyReviewFilter();
         }
         catch (Exception ex)
         {
@@ -475,6 +476,31 @@ public partial class AgentsViewModel : ObservableObject
         {
             IsLoadingReviews = false;
         }
+    }
+
+    /// <summary>Filter cached reviews by the selected agent's ID.</summary>
+    private void ApplyReviewFilter()
+    {
+        if (_allReviews is null) return;
+
+        var agentId = SelectedAgent?.Id;
+        var filtered = string.IsNullOrEmpty(agentId)
+            ? _allReviews
+            : _allReviews.Where(r => r.AgentId == agentId).ToList();
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            AgentReviews.Clear();
+            foreach (var r in filtered)
+                AgentReviews.Add(r);
+        });
+
+        if (string.IsNullOrEmpty(agentId))
+            ReviewsStatus = $"{_allReviews.Count} review(s) (all agents)";
+        else if (filtered.Count > 0)
+            ReviewsStatus = $"{filtered.Count} of {_allReviews.Count} review(s) by {SelectedAgent?.Name ?? agentId}";
+        else
+            ReviewsStatus = $"No reviews by {SelectedAgent?.Name ?? agentId} ({_allReviews.Count} total)";
     }
 
     [RelayCommand]
