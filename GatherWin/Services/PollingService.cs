@@ -25,7 +25,12 @@ public class PollingService
     private readonly Dictionary<string, string> _channelNames = new();
     private DateTimeOffset _feedSinceTimestamp;
     private DateTimeOffset _channelSinceTimestamp;
-    private bool _isFirstRun = true;
+    /// <summary>
+    /// Number of poll cycles remaining that should be treated as "initial load" (seeding).
+    /// The Gather API can return subtly different data between consecutive polls, so we
+    /// seed for 2 cycles to capture any variance before reporting genuinely new items.
+    /// </summary>
+    private int _seedPollsRemaining = 2;
 
     // Events
     public event EventHandler<CommentEventArgs>? NewCommentReceived;
@@ -129,20 +134,25 @@ public class PollingService
         }
     }
 
+    private bool IsSeeding => _seedPollsRemaining > 0;
+
     private async Task PollOnceAsync(CancellationToken ct)
     {
-        AppLogger.Log("Poll", _isFirstRun ? "First poll: seeding state..." : "Poll cycle starting...");
+        AppLogger.Log("Poll", IsSeeding ? $"Seed poll ({_seedPollsRemaining} remaining)..." : "Poll cycle starting...");
 
         await CheckPostCommentsAsync(ct);
         await CheckInboxAsync(ct);
         await CheckFeedAsync(ct);
         await CheckChannelsAsync(ct);
 
-        if (_isFirstRun)
+        if (IsSeeding)
         {
-            _isFirstRun = false;
-            AppLogger.Log("Poll", "Initial state seeded");
-            InitialStateLoaded?.Invoke(this, new InitialStateEventArgs());
+            _seedPollsRemaining--;
+            if (_seedPollsRemaining == 0)
+            {
+                AppLogger.Log("Poll", "Initial state seeded (2 cycles)");
+                InitialStateLoaded?.Invoke(this, new InitialStateEventArgs());
+            }
         }
 
         AppLogger.Log("Poll", "Poll cycle completed");
@@ -166,32 +176,36 @@ public class PollingService
 
             var comments = post.Comments ?? [];
 
-            if (_isFirstRun)
+            if (IsSeeding)
             {
-                // Seed IDs and populate UI with existing comments
+                // Seed using content fingerprints — the API may return unstable IDs
+                var isFirstSeed = _seedPollsRemaining == 2;
                 AppLogger.Log("Poll", $"Seeding {comments.Count} comments from \"{post.Title}\"");
                 foreach (var c in comments)
                 {
-                    if (c.Id is not null) seenIds.Add(c.Id);
+                    seenIds.Add(CommentFingerprint(c));
 
-                    NewCommentReceived?.Invoke(this, new CommentEventArgs
+                    // Only populate the UI on the very first seed poll
+                    if (isFirstSeed)
                     {
-                        PostId = postId,
-                        PostTitle = post.Title ?? postId,
-                        CommentId = c.Id ?? "",
-                        Author = c.Author ?? "unknown",
-                        Body = c.Body ?? "(empty)",
-                        Timestamp = ParseTimestamp(c.Created),
-                        IsInitialLoad = true
-                    });
+                        NewCommentReceived?.Invoke(this, new CommentEventArgs
+                        {
+                            PostId = postId,
+                            PostTitle = post.Title ?? postId,
+                            CommentId = c.Id ?? "",
+                            Author = c.Author ?? "unknown",
+                            Body = c.Body ?? "(empty)",
+                            Timestamp = ParseTimestamp(c.Created),
+                            IsInitialLoad = true
+                        });
+                    }
                 }
                 continue;
             }
 
             foreach (var comment in comments)
             {
-                if (comment.Id is null) continue;
-                if (!seenIds.Add(comment.Id)) continue;
+                if (!seenIds.Add(CommentFingerprint(comment))) continue;
                 if (comment.AuthorId == _agentId) continue;
 
                 AppLogger.Log("Poll", $"New comment on \"{post.Title}\" by {comment.Author}: {(comment.Body ?? "")[..Math.Min(50, (comment.Body ?? "").Length)]}...");
@@ -199,7 +213,7 @@ public class PollingService
                 {
                     PostId = postId,
                     PostTitle = post.Title ?? postId,
-                    CommentId = comment.Id,
+                    CommentId = comment.Id ?? "",
                     Author = comment.Author ?? "unknown",
                     Body = comment.Body ?? "(empty)",
                     Timestamp = ParseTimestamp(comment.Created)
@@ -207,6 +221,13 @@ public class PollingService
             }
         }
     }
+
+    /// <summary>
+    /// Generate a stable fingerprint for a comment based on its content,
+    /// since the Gather API may return unstable IDs across polls.
+    /// </summary>
+    private static string CommentFingerprint(GatherComment c) =>
+        $"{c.Author}|{c.AuthorId}|{c.Body}|{c.Created}";
 
     // ── Inbox Monitoring ────────────────────────────────────────
 
@@ -217,37 +238,42 @@ public class PollingService
 
         var messages = inbox.Messages ?? [];
 
-        if (_isFirstRun)
+        if (IsSeeding)
         {
+            var isFirstSeed = _seedPollsRemaining == 2;
             AppLogger.Log("Poll", $"Seeding {messages.Count} inbox messages");
             foreach (var m in messages)
             {
-                if (m.Id is not null) _seenInboxMessageIds.Add(m.Id);
+                // Use content fingerprint — the API may return unstable/null IDs
+                _seenInboxMessageIds.Add(InboxFingerprint(m));
 
-                NewInboxMessageReceived?.Invoke(this, new InboxMessageEventArgs
+                // Only populate the UI on the very first seed poll
+                if (isFirstSeed)
                 {
-                    MessageId = m.Id ?? "",
-                    Subject = m.Subject ?? m.Type ?? "message",
-                    Body = m.Body ?? "(empty)",
-                    Timestamp = ParseTimestamp(m.Created),
-                    IsInitialLoad = true,
-                    PostId = m.PostId,
-                    CommentId = m.CommentId,
-                    ChannelId = m.ChannelId
-                });
+                    NewInboxMessageReceived?.Invoke(this, new InboxMessageEventArgs
+                    {
+                        MessageId = m.Id ?? "",
+                        Subject = m.Subject ?? m.Type ?? "message",
+                        Body = m.Body ?? "(empty)",
+                        Timestamp = ParseTimestamp(m.Created),
+                        IsInitialLoad = true,
+                        PostId = m.PostId,
+                        CommentId = m.CommentId,
+                        ChannelId = m.ChannelId
+                    });
+                }
             }
             return;
         }
 
         foreach (var message in messages)
         {
-            if (message.Id is null) continue;
-            if (!_seenInboxMessageIds.Add(message.Id)) continue;
+            if (!_seenInboxMessageIds.Add(InboxFingerprint(message))) continue;
 
             AppLogger.Log("Poll", $"New inbox message: {message.Subject ?? message.Type ?? "message"}");
             NewInboxMessageReceived?.Invoke(this, new InboxMessageEventArgs
             {
-                MessageId = message.Id,
+                MessageId = message.Id ?? "",
                 Subject = message.Subject ?? message.Type ?? "message",
                 Body = message.Body ?? "(empty)",
                 Timestamp = ParseTimestamp(message.Created),
@@ -258,6 +284,13 @@ public class PollingService
         }
     }
 
+    /// <summary>
+    /// Generate a stable fingerprint for an inbox message based on its content,
+    /// since the Gather API may return unstable or null notification IDs.
+    /// </summary>
+    private static string InboxFingerprint(InboxMessage m) =>
+        $"{m.Subject}|{m.Body}|{m.Created}|{m.PostId}|{m.CommentId}|{m.ChannelId}";
+
     // ── Feed Monitoring ─────────────────────────────────────────
 
     private async Task CheckFeedAsync(CancellationToken ct)
@@ -267,7 +300,7 @@ public class PollingService
 
         var posts = feed.Posts ?? [];
 
-        if (_isFirstRun)
+        if (IsSeeding)
         {
             if (SkipInitialFeedFetch)
             {
@@ -278,20 +311,25 @@ public class PollingService
             }
             else
             {
+                var isFirstSeed = _seedPollsRemaining == 2;
                 AppLogger.Log("Poll", $"Seeding {posts.Count} feed posts");
                 foreach (var p in posts)
                 {
                     if (p.Id is not null) _seenFeedPostIds.Add(p.Id);
 
-                    NewFeedPostReceived?.Invoke(this, new FeedPostEventArgs
+                    // Only populate the UI on the very first seed poll
+                    if (isFirstSeed)
                     {
-                        PostId = p.Id ?? "",
-                        Author = p.Author ?? "unknown",
-                        Title = p.Title ?? p.Summary ?? "(no title)",
-                        Body = p.Body ?? p.Summary ?? "",
-                        Timestamp = ParseTimestamp(p.Created),
-                        IsInitialLoad = true
-                    });
+                        NewFeedPostReceived?.Invoke(this, new FeedPostEventArgs
+                        {
+                            PostId = p.Id ?? "",
+                            Author = p.Author ?? "unknown",
+                            Title = p.Title ?? p.Summary ?? "(no title)",
+                            Body = p.Body ?? p.Summary ?? "",
+                            Timestamp = ParseTimestamp(p.Created),
+                            IsInitialLoad = true
+                        });
+                    }
                 }
             }
             _feedSinceTimestamp = DateTimeOffset.UtcNow;
@@ -329,7 +367,7 @@ public class PollingService
 
     private async Task CheckChannelsAsync(CancellationToken ct)
     {
-        if (_isFirstRun && SkipInitialChannelFetch)
+        if (IsSeeding && SkipInitialChannelFetch)
         {
             AppLogger.Log("Poll", "Skipping initial channel fetch (pre-loaded by ChannelsViewModel)");
             return;
@@ -360,24 +398,29 @@ public class PollingService
 
             var messages = msgResp.Messages ?? [];
 
-            if (_isFirstRun)
+            if (IsSeeding)
             {
+                var isFirstSeed = _seedPollsRemaining == 2;
                 AppLogger.Log("Poll", $"Seeding {messages.Count} messages from #{channelName}");
                 foreach (var m in messages)
                 {
                     if (m.Id is not null) seenIds.Add(m.Id);
 
-                    NewChannelMessageReceived?.Invoke(this, new ChannelMessageEventArgs
+                    // Only populate the UI on the very first seed poll
+                    if (isFirstSeed)
                     {
-                        ChannelId = channel.Id,
-                        ChannelName = channelName,
-                        MessageId = m.Id ?? "",
-                        Author = m.AuthorName ?? m.AuthorId ?? "unknown",
-                        Body = m.Body ?? "(empty)",
-                        Timestamp = ParseTimestamp(m.Created),
-                        IsInitialLoad = true,
-                        ReplyTo = m.ReplyTo
-                    });
+                        NewChannelMessageReceived?.Invoke(this, new ChannelMessageEventArgs
+                        {
+                            ChannelId = channel.Id,
+                            ChannelName = channelName,
+                            MessageId = m.Id ?? "",
+                            Author = m.AuthorName ?? m.AuthorId ?? "unknown",
+                            Body = m.Body ?? "(empty)",
+                            Timestamp = ParseTimestamp(m.Created),
+                            IsInitialLoad = true,
+                            ReplyTo = m.ReplyTo
+                        });
+                    }
                 }
                 continue;
             }

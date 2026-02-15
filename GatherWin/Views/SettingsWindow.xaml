@@ -29,6 +29,8 @@
                     <RowDefinition Height="Auto"/>  <!-- Separator 5 -->
                     <RowDefinition Height="Auto"/>  <!-- Appearance section -->
                     <RowDefinition Height="Auto"/>  <!-- Separator 6 -->
+                    <RowDefinition Height="Auto"/>  <!-- Log section -->
+                    <RowDefinition Height="Auto"/>  <!-- Separator 7 -->
                     <RowDefinition Height="Auto"/>  <!-- Identity section -->
                 </Grid.RowDefinitions>
 
@@ -227,8 +229,30 @@
                 <!-- Separator 6 -->
                 <Border Grid.Row="12" Height="1" Background="#DEE2E6" Margin="0,12,0,16"/>
 
-                <!-- Identity Section -->
+                <!-- Log Settings -->
                 <StackPanel Grid.Row="13">
+                    <TextBlock Text="LOG" FontSize="11" FontWeight="SemiBold" Foreground="#95A5A6"
+                               Margin="0,0,0,8"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Max Log Size:" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <TextBox x:Name="MaxLogSizeBox" Width="70" Padding="6,4" FontSize="12"/>
+                            <TextBlock Text=" KB" VerticalAlignment="Center" Foreground="#777" FontSize="12"/>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="Maximum size per log file before rotation (default: 256 KB, up to 10 files)."
+                               FontSize="10" Foreground="#999" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <!-- Separator 7 -->
+                <Border Grid.Row="14" Height="1" Background="#DEE2E6" Margin="0,12,0,16"/>
+
+                <!-- Identity Section -->
+                <StackPanel Grid.Row="15">
                     <TextBlock Text="IDENTITY" FontSize="11" FontWeight="SemiBold" Foreground="#95A5A6"
                                Margin="0,0,0,8"/>
                     <Grid>

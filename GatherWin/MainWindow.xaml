@@ -26,6 +26,7 @@
         <converters:IsCurrentUserToVisibilityConverter x:Key="IsCurrentUserToVis"/>
         <converters:CharCountConverter x:Key="CharCount"/>
         <converters:CharCountBrushConverter x:Key="CharCountBrush"/>
+        <converters:LogEntryTypeToBrushConverter x:Key="LogEntryBrush"/>
 
         <!-- What's New card template -->
         <DataTemplate x:Key="WhatsNewCardTemplate" DataType="{x:Type vm:WhatsNewEntry}">
@@ -1790,6 +1791,40 @@
                         </Border>
                     </Grid>
                 </Grid>
+            </TabItem>
+            <!-- Log Tab -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="Log" FontSize="13" Padding="8,4"/>
+                </TabItem.Header>
+                <ListBox ItemsSource="{Binding PollingLog.Entries}"
+                         BorderThickness="0" Background="#1E1E1E"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         HorizontalContentAlignment="Stretch"
+                         x:Name="LogListBox"
+                         VirtualizingPanel.ScrollUnit="Pixel">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="8,2"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Focusable" Value="False"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock FontFamily="Consolas" FontSize="12"
+                                       Foreground="{Binding EntryType, Converter={StaticResource LogEntryBrush}}"
+                                       TextWrapping="Wrap">
+                                <Run Text="{Binding Timestamp, StringFormat='[{0:HH:mm:ss}]', Mode=OneWay}"
+                                     Foreground="#777"/>
+                                <Run Text=" "/>
+                                <Run Text="{Binding Message, Mode=OneWay}"/>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </TabItem>
         </TabControl>
 

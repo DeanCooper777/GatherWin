@@ -30,6 +30,9 @@ public partial class SettingsWindow : Window
     // Appearance
     public int FontScalePercent { get; private set; } = 100;
 
+    // Log
+    public int MaxLogSizeKB { get; private set; } = 256;
+
     // Feature 3: Claude API Key
     public string ClaudeApiKey { get; private set; } = string.Empty;
 
@@ -68,6 +71,9 @@ public partial class SettingsWindow : Window
         // Post display
         ShowFullPostsBox.IsChecked = whatsNewOptions.ShowFullPosts;
         MaxCommentLengthBox.Text = whatsNewOptions.MaxCommentLength.ToString();
+
+        // Log
+        MaxLogSizeBox.Text = whatsNewOptions.MaxLogSizeKB.ToString();
 
         // Appearance — set slider value (triggers ValueChanged to update label)
         FontScaleSlider.Value = whatsNewOptions.FontScalePercent;
@@ -114,6 +120,9 @@ public partial class SettingsWindow : Window
         // Post display
         ShowFullPosts = ShowFullPostsBox.IsChecked == true;
         MaxCommentLength = int.TryParse(MaxCommentLengthBox.Text, out var mcl) && mcl > 0 ? mcl : 10000;
+
+        // Log
+        MaxLogSizeKB = int.TryParse(MaxLogSizeBox.Text, out var mls) && mls > 0 ? mls : 256;
 
         // Appearance
         FontScalePercent = (int)FontScaleSlider.Value;

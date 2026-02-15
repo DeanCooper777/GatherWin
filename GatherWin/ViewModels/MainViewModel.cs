@@ -23,6 +23,15 @@ public partial class MainViewModel : ObservableObject
     private string _claudeApiKey;
     private int _newBadgeDurationMinutes;
 
+    // Polling log service
+    public PollingLogService PollingLog { get; } = new();
+
+    // Per-cycle counters for poll summary
+    private int _cycleCommentCount;
+    private int _cycleInboxCount;
+    private int _cycleFeedCount;
+    private int _cycleChannelCount;
+
     // Badge expiry timer
     private readonly DispatcherTimer _badgeExpiryTimer;
 
@@ -120,6 +129,11 @@ public partial class MainViewModel : ObservableObject
         Agents.MaxAgents = WhatsNew.Options.MaxAgentsTab;
         Agents.PostCreated = postId => _ = SubscribeToPostAsync(postId);
         Agents.NavigateToPost = postId => _ = NavigateToDiscussionsTabAsync(postId);
+
+        // Apply saved log settings, load existing log, and write startup entry
+        PollingLog.MaxLogSizeKB = WhatsNew.Options.MaxLogSizeKB;
+        PollingLog.LoadExistingLog();
+        PollingLog.WriteEntry("—————— GatherWin started ——————");
 
         // Apply saved font scale
         FontScale = WhatsNew.Options.FontScalePercent / 100.0;
@@ -367,8 +381,14 @@ public partial class MainViewModel : ObservableObject
         AppLogger.Log("VM", "Disconnected");
     }
 
+    private bool _isShutdown;
+
     public void Shutdown()
     {
+        if (_isShutdown) return;
+        _isShutdown = true;
+
+        PollingLog.WriteEntry("—————— GatherWin exiting ——————");
         _badgeExpiryTimer.Tick -= BadgeExpiryTimer_Tick;
         _badgeExpiryTimer.Stop();
         _auth.TokenRefreshed -= _onTokenRefreshed;
@@ -423,6 +443,12 @@ public partial class MainViewModel : ObservableObject
             var now = DateTimeOffset.Now;
             Comments.AddComment(e.PostId, e.PostTitle, e.Author, e.Body, e.Timestamp, isNew);
 
+            if (isNew)
+            {
+                _cycleCommentCount++;
+                PollingLog.WriteEntry($"Comment by {e.Author} on \"{e.PostTitle}\"", Models.LogEntryType.Comment);
+            }
+
             // Update discussion list comment counts
             if (isNew)
             {
@@ -457,6 +483,11 @@ public partial class MainViewModel : ObservableObject
         {
             var isNew = !e.IsInitialLoad;
             var now = DateTimeOffset.Now;
+            if (isNew)
+            {
+                _cycleInboxCount++;
+                PollingLog.WriteEntry($"Inbox: {e.Subject}", Models.LogEntryType.Inbox);
+            }
             Inbox.AddMessage(e.Subject, e.Body, e.Timestamp, isNew, e.PostId, e.CommentId, e.ChannelId);
             AddToAllActivity(new ActivityItem
             {
@@ -479,6 +510,11 @@ public partial class MainViewModel : ObservableObject
         {
             var isNew = !e.IsInitialLoad;
             var now = DateTimeOffset.Now;
+            if (isNew)
+            {
+                _cycleFeedCount++;
+                PollingLog.WriteEntry($"Feed post by {e.Author}: \"{e.Title}\"", Models.LogEntryType.FeedPost);
+            }
             Feed.AddPost(e.PostId, e.Author, e.Title, e.Body, e.Timestamp, isNew);
             AddToAllActivity(new ActivityItem
             {
@@ -498,6 +534,11 @@ public partial class MainViewModel : ObservableObject
         {
             var isNew = !e.IsInitialLoad;
             var now = DateTimeOffset.Now;
+            if (isNew)
+            {
+                _cycleChannelCount++;
+                PollingLog.WriteEntry($"Channel \"{e.ChannelName}\" — {e.Author}: {e.Body[..Math.Min(e.Body.Length, 80)]}", Models.LogEntryType.Channel);
+            }
             Channels.AddMessage(e.ChannelId, e.ChannelName, e.MessageId, e.Author, e.Body,
                 e.Timestamp, isNew, e.ReplyTo);
             AddToAllActivity(new ActivityItem
@@ -518,15 +559,39 @@ public partial class MainViewModel : ObservableObject
 
         _onPollCycle = (_, time) =>
         {
+            // Build poll summary
+            var total = _cycleCommentCount + _cycleInboxCount + _cycleFeedCount + _cycleChannelCount;
+            if (total == 0)
+            {
+                PollingLog.WriteEntry("Poll complete — no new activity");
+            }
+            else
+            {
+                var parts = new List<string>();
+                if (_cycleCommentCount > 0) parts.Add($"{_cycleCommentCount} comment{(_cycleCommentCount != 1 ? "s" : "")}");
+                if (_cycleInboxCount > 0) parts.Add($"{_cycleInboxCount} inbox");
+                if (_cycleFeedCount > 0) parts.Add($"{_cycleFeedCount} feed post{(_cycleFeedCount != 1 ? "s" : "")}");
+                if (_cycleChannelCount > 0) parts.Add($"{_cycleChannelCount} channel msg{(_cycleChannelCount != 1 ? "s" : "")}");
+                PollingLog.WriteEntry($"Poll complete — {string.Join(", ", parts)}");
+            }
+            _cycleCommentCount = _cycleInboxCount = _cycleFeedCount = _cycleChannelCount = 0;
+
             Application.Current.Dispatcher.Invoke(() =>
             {
                 LastPollTime = time;
                 StatusMessage = $"Connected — polling every {_pollIntervalSeconds}s | Last: {time.ToLocalTime():HH:mm:ss}";
+
+                // Refresh relative timestamps on all visible activity items
+                foreach (var item in AllActivity) item.RefreshTimestamp();
+                foreach (var item in Comments.Comments) item.RefreshTimestamp();
+                foreach (var item in Inbox.Messages) item.RefreshTimestamp();
+                foreach (var item in Feed.Posts) item.RefreshTimestamp();
             });
         };
 
         _onPollError = (_, error) =>
         {
+            PollingLog.WriteEntry($"Poll error: {error}", Models.LogEntryType.Error);
             Application.Current.Dispatcher.Invoke(() =>
             {
                 StatusMessage = $"Poll error: {error}";
@@ -538,6 +603,18 @@ public partial class MainViewModel : ObservableObject
             Application.Current.Dispatcher.Invoke(() =>
             {
                 StatusMessage = $"Connected — polling every {_pollIntervalSeconds}s | Initial state loaded";
+
+                // Reset badge counts — initial load items should never show as new
+                Comments.ResetNewCount();
+                Inbox.ResetNewCount();
+                Feed.ResetNewCount();
+                Channels.ResetNewCount();
+
+                // Clear "new" badges on individual items loaded during initial state
+                foreach (var item in AllActivity) item.IsNew = false;
+                foreach (var item in Comments.Comments) item.IsNew = false;
+                foreach (var item in Inbox.Messages) item.IsNew = false;
+                foreach (var item in Feed.Posts) item.IsNew = false;
 
                 // Auto-select first channel so messages are visible
                 if (Channels.SelectedChannel is null && Channels.Channels.Count > 0)
@@ -916,6 +993,10 @@ public partial class MainViewModel : ObservableObject
             if (fullPostsChanged)
                 _ = RefreshPostBodiesAsync(dialog.ShowFullPosts, CancellationToken.None);
 
+            // Apply log settings
+            WhatsNew.Options.MaxLogSizeKB = dialog.MaxLogSizeKB;
+            PollingLog.MaxLogSizeKB = dialog.MaxLogSizeKB;
+
             // Apply font scale
             WhatsNew.Options.FontScalePercent = dialog.FontScalePercent;
             FontScale = dialog.FontScalePercent / 100.0;
@@ -930,7 +1011,8 @@ public partial class MainViewModel : ObservableObject
                 $"MaxDigest={dialog.MaxDigestPosts}, MaxPlatform={dialog.MaxPlatformPosts}, " +
                 $"MaxChannelsTab={dialog.MaxChannelsTab}, MaxAgentsTab={dialog.MaxAgentsTab}, " +
                 $"ShowFullPosts={dialog.ShowFullPosts}, " +
-                $"FontScale={dialog.FontScalePercent}%, BadgeDuration={_newBadgeDurationMinutes}min");
+                $"FontScale={dialog.FontScalePercent}%, BadgeDuration={_newBadgeDurationMinutes}min, " +
+                $"MaxLogSizeKB={dialog.MaxLogSizeKB}");
         }
     }
 }

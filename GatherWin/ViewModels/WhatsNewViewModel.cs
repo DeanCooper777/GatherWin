@@ -64,6 +64,13 @@ public class WhatsNewOptions
     /// The Gather API enforces a server-side limit of 2,000 characters.
     /// </summary>
     public int MaxCommentLength { get; set; } = 2000;
+
+    // ── Log settings ──────────────────────────────────────────────
+    /// <summary>
+    /// Maximum size of each polling log file in kilobytes.
+    /// When exceeded, files are rotated (01→02, etc., up to 10).
+    /// </summary>
+    public int MaxLogSizeKB { get; set; } = 256;
 }
 
 public partial class WhatsNewViewModel : ObservableObject

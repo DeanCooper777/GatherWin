@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using GatherWin.Converters;
 using GatherWin.Models;
 using GatherWin.Services;
@@ -53,6 +54,17 @@ public partial class MainWindow : Window
                 FlashWindow();
         };
         viewModel.NewActivityArrived += _onNewActivity;
+
+        // Auto-scroll the Log tab ListBox after a batch of entries is flushed
+        viewModel.PollingLog.EntriesFlushed += (_, _) =>
+        {
+            // Defer scroll until after WPF finishes processing the collection changes
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (LogListBox.Items.Count > 0)
+                    LogListBox.ScrollIntoView(LogListBox.Items[^1]);
+            }, DispatcherPriority.Loaded);
+        };
 
         Closing += (_, _) =>
         {

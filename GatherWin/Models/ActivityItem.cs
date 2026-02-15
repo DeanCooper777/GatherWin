@@ -27,4 +27,9 @@ public partial class ActivityItem : ObservableObject
 
     /// <summary>When this item was marked as new (for badge timeout).</summary>
     [ObservableProperty] private DateTimeOffset _markedNewAt;
+
+    /// <summary>
+    /// Force WPF to re-evaluate the Timestamp binding (refreshes relative time display).
+    /// </summary>
+    public void RefreshTimestamp() => OnPropertyChanged(nameof(Timestamp));
 }
