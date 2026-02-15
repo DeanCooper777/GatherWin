@@ -22,6 +22,9 @@ public partial class CommentsViewModel : ObservableObject
 {
     private readonly GatherApiClient _api;
 
+    /// <summary>Callback invoked when a comment/reply is successfully sent (context, first 80 chars).</summary>
+    public Action<string, string>? MessageSent { get; set; }
+
     public ObservableCollection<ActivityItem> Comments { get; } = new();
 
     /// <summary>Left-panel list of watched discussions (Feature 1).</summary>
@@ -133,6 +136,8 @@ public partial class CommentsViewModel : ObservableObject
                 };
 
                 Application.Current.Dispatcher.Invoke(() => Comments.Insert(0, reply));
+
+                MessageSent?.Invoke(SelectedComment.Title ?? "comment", ReplyText.Trim());
                 ReplyText = string.Empty;
             }
             else
@@ -327,6 +332,7 @@ public partial class CommentsViewModel : ObservableObject
                     }
                 });
 
+                MessageSent?.Invoke(DiscussionTitle ?? "discussion", DiscussionReplyText.Trim());
                 DiscussionReplyText = string.Empty;
                 ReplyToComment = null;
             }

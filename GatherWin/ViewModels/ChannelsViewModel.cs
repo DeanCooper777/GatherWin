@@ -25,6 +25,9 @@ public partial class ChannelsViewModel : ObservableObject
 {
     private readonly GatherApiClient _api;
 
+    /// <summary>Callback invoked when a message is successfully sent (first 80 chars).</summary>
+    public Action<string, string>? MessageSent { get; set; }
+
     /// <summary>All channels from the API (unfiltered master list).</summary>
     private readonly List<ChannelInfo> _allChannels = new();
 
@@ -500,8 +503,11 @@ public partial class ChannelsViewModel : ObservableObject
                     }
                 });
 
+                var sentText = ReplyText.Trim();
                 ReplyText = string.Empty;
                 ReplyToMessage = null;
+
+                MessageSent?.Invoke(SelectedChannel.Name, sentText);
             }
             else
             {

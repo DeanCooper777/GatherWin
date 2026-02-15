@@ -126,6 +126,18 @@ public partial class MainViewModel : ObservableObject
             WhatsNew.SaveOptions();
         };
 
+        // Wire sent-message logging to Polling Log
+        Channels.MessageSent = (channelName, text) =>
+        {
+            var preview = text.Length > 80 ? text[..80] + "…" : text;
+            PollingLog.WriteEntry($"Sent to \"{channelName}\": {preview}", Models.LogEntryType.Channel);
+        };
+        Comments.MessageSent = (context, text) =>
+        {
+            var preview = text.Length > 80 ? text[..80] + "…" : text;
+            PollingLog.WriteEntry($"Sent reply on \"{context}\": {preview}", Models.LogEntryType.Comment);
+        };
+
         // Apply saved agents settings
         Agents.MaxAgents = WhatsNew.Options.MaxAgentsTab;
         Agents.PostCreated = postId => _ = SubscribeToPostAsync(postId);
