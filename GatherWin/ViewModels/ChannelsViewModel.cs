@@ -307,8 +307,12 @@ public partial class ChannelsViewModel : ObservableObject
                 Channels.Add(channel);
             }
 
-            // Skip duplicates (messages may already be pre-loaded)
+            // Skip duplicates — check by ID and also by content (handles optimistic local adds
+            // where the local GUID differs from the server-assigned ID)
             if (channel.Messages.Any(m => m.Id == messageId))
+                return;
+            if (channel.Messages.Any(m => m.Author == author && m.Body == body
+                    && Math.Abs((m.Timestamp - timestamp).TotalSeconds) < 60))
                 return;
 
             var item = new ActivityItem
@@ -327,7 +331,18 @@ public partial class ChannelsViewModel : ObservableObject
 
             InsertSorted(channel.Messages, item);
 
-            // Also add to threaded view
+            // Also add to threaded view (skip if content-duplicate already exists)
+            if (channel.ThreadedMessages.Any(m => m.Author == author && m.Body == body
+                    && Math.Abs((m.Timestamp - timestamp).TotalSeconds) < 60))
+            {
+                if (isNew)
+                {
+                    channel.NewMessageCount++;
+                    NewCount++;
+                }
+                return;
+            }
+
             var threadedMsg = new DiscussionComment
             {
                 CommentId = messageId,

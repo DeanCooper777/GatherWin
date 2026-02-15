@@ -455,7 +455,6 @@ public class PollingService
             {
                 if (msg.Id is null) continue;
                 if (!seenIds.Add(msg.Id)) continue;
-                if (msg.AuthorId == _agentId) continue;
 
                 AppLogger.Log("Poll", $"New channel msg in #{channelName} by {msg.AuthorName ?? msg.AuthorId}: {(msg.Body ?? "")[..Math.Min(50, (msg.Body ?? "").Length)]}...");
                 NewChannelMessageReceived?.Invoke(this, new ChannelMessageEventArgs
