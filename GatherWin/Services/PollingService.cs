@@ -46,14 +46,16 @@ public class PollingService
 
     public bool IsRunning => _pollingTask is not null && !_pollingTask.IsCompleted;
 
-    /// <summary>When true, the first poll skips the channel fetch (already loaded by ChannelsViewModel).</summary>
+    /// <summary>When true, seed polls skip the channel fetch. First real poll syncs IDs without emitting.</summary>
     public bool SkipInitialChannelFetch { get; set; }
+    private bool _channelSyncPending;
 
-    /// <summary>When true, the first poll skips the feed fetch (already pre-loaded by MainViewModel).</summary>
+    /// <summary>When true, seed polls skip the feed fetch. First real poll syncs IDs without emitting.</summary>
     public bool SkipInitialFeedFetch { get; set; }
 
-    /// <summary>When true, the first poll skips the inbox fetch (already pre-loaded by MainViewModel).</summary>
+    /// <summary>When true, seed polls skip inbox fetch. First real poll syncs IDs without emitting.</summary>
     public bool SkipInitialInboxFetch { get; set; }
+    private bool _inboxSyncPending;
 
     /// <summary>Seed the seen-feed-post-IDs set so pre-loaded posts aren't duplicated.</summary>
     public void SeedFeedPostIds(IEnumerable<string> ids)
@@ -81,11 +83,14 @@ public class PollingService
             set.Add(id);
     }
 
-    /// <summary>Seed inbox fingerprints so pre-loaded messages aren't duplicated.</summary>
+    /// <summary>Seed inbox IDs and fingerprints so pre-loaded messages aren't duplicated.</summary>
     public void SeedInboxFingerprints(IEnumerable<InboxMessage> messages)
     {
         foreach (var m in messages)
+        {
+            if (m.Id is not null) _seenInboxMessageIds.Add(m.Id);
             _seenInboxMessageIds.Add(InboxFingerprint(m));
+        }
     }
 
     public PollingService(GatherApiClient api, string agentId, string[] watchedPostIds, int intervalSeconds)
@@ -267,6 +272,7 @@ public class PollingService
     {
         if (IsSeeding && SkipInitialInboxFetch)
         {
+            _inboxSyncPending = true;
             AppLogger.Log("Poll", "Skipping initial inbox fetch (pre-loaded)");
             return;
         }
@@ -276,11 +282,16 @@ public class PollingService
 
         var messages = inbox.Messages ?? [];
 
-        if (IsSeeding)
+        // During seeding or first sync poll, just record IDs without emitting
+        var isSyncPoll = _inboxSyncPending;
+        if (isSyncPoll) _inboxSyncPending = false;
+
+        if (IsSeeding || isSyncPoll)
         {
-            AppLogger.Log("Poll", $"Seeding {messages.Count} inbox messages");
+            AppLogger.Log("Poll", $"{(isSyncPoll ? "Sync" : "Seed")}: recording {messages.Count} inbox message IDs");
             foreach (var m in messages)
             {
+                if (m.Id is not null) _seenInboxMessageIds.Add(m.Id);
                 _seenInboxMessageIds.Add(InboxFingerprint(m));
             }
             return;
@@ -288,7 +299,14 @@ public class PollingService
 
         foreach (var message in messages)
         {
-            if (!_seenInboxMessageIds.Add(InboxFingerprint(message))) continue;
+            // Deduplicate by ID first (primary), then by fingerprint (fallback)
+            var isDuplicate = false;
+            if (message.Id is not null)
+                isDuplicate = !_seenInboxMessageIds.Add(message.Id);
+            if (!isDuplicate)
+                isDuplicate = !_seenInboxMessageIds.Add(InboxFingerprint(message));
+
+            if (isDuplicate) continue;
 
             AppLogger.Log("Poll", $"New inbox message: {message.Subject ?? message.Type ?? "message"}");
             NewInboxMessageReceived?.Invoke(this, new InboxMessageEventArgs
@@ -391,8 +409,17 @@ public class PollingService
     {
         if (IsSeeding && SkipInitialChannelFetch)
         {
+            _channelSyncPending = true;
             AppLogger.Log("Poll", "Skipping initial channel fetch (pre-loaded by ChannelsViewModel)");
             return;
+        }
+
+        // First real poll after skipped seeding: sync all IDs without emitting events
+        var isSyncPoll = _channelSyncPending;
+        if (isSyncPoll)
+        {
+            _channelSyncPending = false;
+            AppLogger.Log("Poll", "Channel sync poll: syncing IDs from API without emitting events");
         }
 
         var channelList = await _api.GetChannelsAsync(ct);
@@ -469,6 +496,15 @@ public class PollingService
             }
 
             AppLogger.Log("Poll", $"Channel #{channelName}: API returned {messages.Count} msgs, seenIds has {seenIds.Count}");
+
+            if (isSyncPoll)
+            {
+                // Sync poll: just seed all IDs, don't emit events
+                foreach (var msg in messages)
+                    if (msg.Id is not null) seenIds.Add(msg.Id);
+                AppLogger.Log("Poll", $"Channel #{channelName}: synced {messages.Count} message IDs");
+                continue;
+            }
 
             foreach (var msg in messages)
             {

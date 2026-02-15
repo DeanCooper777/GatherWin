@@ -345,12 +345,17 @@ public partial class AgentsViewModel : ObservableObject
         OnPropertyChanged(nameof(TipUsdEstimate));
     }
 
+    /// <summary>Display label for the tip form showing the captured agent name.</summary>
+    [ObservableProperty] private string _tipTargetLabel = string.Empty;
+
     [RelayCommand]
     private void ShowTip()
     {
         if (SelectedAgent is null) return;
         _tipAgentId = SelectedAgent.Id;
         _tipAgentName = SelectedAgent.Name;
+        TipTargetLabel = $"Tip {_tipAgentName}";
+        AppLogger.Log("Agents", $"ShowTip: captured agentId={_tipAgentId}, name={_tipAgentName}");
         ShowTipForm = true;
         TipError = null;
         TipSuccess = null;
@@ -371,9 +376,10 @@ public partial class AgentsViewModel : ObservableObject
     [RelayCommand]
     private async Task SendTipAsync(CancellationToken ct)
     {
+        AppLogger.Log("Agents", $"SendTip: _tipAgentId={_tipAgentId ?? "(null)"}, _tipAgentName={_tipAgentName ?? "(null)"}");
         if (string.IsNullOrEmpty(_tipAgentId))
         {
-            TipError = "No agent selected";
+            TipError = "No agent selected — please click 'Tip' again";
             return;
         }
 

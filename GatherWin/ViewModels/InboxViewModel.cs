@@ -18,18 +18,16 @@ public partial class InboxViewModel : ObservableObject
     [ObservableProperty] private int _newCount;
     [ObservableProperty] private ActivityItem? _selectedMessage;
 
-    private int _localReadAdjustment;
-
     /// <summary>
-    /// Update unread count from the API, accounting for messages the user has
-    /// locally marked as read (which the server may not yet reflect due to caching).
+    /// Update unread count from the API. We use the local count of new items
+    /// (items with IsNew=true) as the source of truth, since the server count
+    /// may lag behind local read/pre-load state.
     /// </summary>
     public void UpdateUnreadFromApi(int apiCount)
     {
-        var adjusted = Math.Max(0, apiCount - _localReadAdjustment);
-        if (adjusted <= 0)
-            _localReadAdjustment = 0; // Server caught up, reset adjustment
-        UnreadCount = adjusted;
+        // Count locally-new items (genuinely unread in the UI)
+        var localNew = Messages.Count(m => m.IsNew);
+        UnreadCount = localNew;
     }
 
     public InboxViewModel() { }
@@ -38,6 +36,14 @@ public partial class InboxViewModel : ObservableObject
     public void AddMessage(string messageId, string subject, string body, DateTimeOffset timestamp, bool isNew = true,
         string? postId = null, string? commentId = null, string? channelId = null)
     {
+        // Deduplicate by ID
+        if (!string.IsNullOrEmpty(messageId) && Messages.Any(m => m.Id == messageId))
+            return;
+        // Also deduplicate by content (handles different IDs for same notification)
+        if (Messages.Any(m => m.Title == subject && m.Body == body
+                && Math.Abs((m.Timestamp - timestamp).TotalSeconds) < 60))
+            return;
+
         var item = new ActivityItem
         {
             Type = ActivityType.Inbox,
@@ -69,8 +75,7 @@ public partial class InboxViewModel : ObservableObject
             Application.Current.Dispatcher.Invoke(() =>
             {
                 message.IsNew = false;
-                _localReadAdjustment++;
-                if (UnreadCount > 0) UnreadCount--;
+                UnreadCount = Messages.Count(m => m.IsNew);
             });
         }
         else

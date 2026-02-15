@@ -6,7 +6,7 @@
         xmlns:models="clr-namespace:GatherWin.Models"
         xmlns:vm="clr-namespace:GatherWin.ViewModels"
         xmlns:helpers="clr-namespace:GatherWin.Helpers"
-        Title="GatherWin — OnTheEdgeOfReality"
+        Title="GatherWin v1.0 — OnTheEdgeOfReality"
         Width="900" Height="700"
         MinWidth="600" MinHeight="450"
         WindowStartupLocation="CenterScreen"
@@ -1606,7 +1606,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*" MaxHeight="250"/>
+                                <RowDefinition Height="*" MaxHeight="350"/>
                             </Grid.RowDefinitions>
 
                             <!-- Header -->
@@ -1615,11 +1615,15 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" FontSize="12" FontWeight="SemiBold" Foreground="#9C27B0">
-                                    <Run Text="Skill Reviews"/>
-                                    <Run Text="{Binding Agents.ReviewsStatus, Mode=OneWay}" FontWeight="Normal"
-                                         Foreground="#777" FontSize="10"/>
-                                </TextBlock>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#9C27B0">
+                                        <Run Text="Skill Reviews"/>
+                                        <Run Text="{Binding Agents.ReviewsStatus, Mode=OneWay}" FontWeight="Normal"
+                                             Foreground="#777" FontSize="10"/>
+                                    </TextBlock>
+                                    <TextBlock Text="Reviews are for skills (not agents) — showing all platform reviews"
+                                               FontSize="9" Foreground="#999" FontStyle="Italic"/>
+                                </StackPanel>
                                 <Button Grid.Column="1" Content="Write Review"
                                         Command="{Binding Agents.OpenReviewFormCommand}"
                                         Background="#9C27B0" Foreground="White" Padding="8,2"
@@ -1849,10 +1853,8 @@
                                     Margin="4,0,0,4" BorderBrush="#F39C12" BorderThickness="1"
                                     Visibility="{Binding Agents.ShowTipForm, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
-                                    <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#F39C12" Margin="0,0,0,4">
-                                        <Run Text="Tip "/>
-                                        <Run Text="{Binding Agents.SelectedAgent.Name, Mode=OneWay}"/>
-                                    </TextBlock>
+                                    <TextBlock Text="{Binding Agents.TipTargetLabel}" FontSize="11"
+                                               FontWeight="SemiBold" Foreground="#F39C12" Margin="0,0,0,4"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                         <TextBlock Text="Amount (BCH): " FontSize="11" Foreground="#555"
                                                    VerticalAlignment="Center"/>
@@ -2354,7 +2356,7 @@
                                                     <StackPanel Grid.Column="0">
                                                         <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
                                                                    Foreground="#2C3E50" TextWrapping="Wrap"/>
-                                                        <TextBlock FontSize="11" Foreground="#555" Margin="0,4,0,0">
+                                                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#27AE60" Margin="0,4,0,0">
                                                             <Run Text="{Binding BasePriceBch, Mode=OneWay}"/>
                                                             <Run Text=" BCH"/>
                                                         </TextBlock>
@@ -2391,22 +2393,29 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
 
-                                <!-- Empty state -->
-                                <TextBlock Grid.Row="1" Text="Select a category to browse items"
+                                <!-- Empty state (only shown when no items loaded) -->
+                                <TextBlock Grid.Row="1"
                                            FontSize="12" Foreground="#999" FontStyle="Italic"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           TextWrapping="Wrap" TextAlignment="Center" Padding="20">
+                                           TextWrapping="Wrap" TextAlignment="Center" Padding="20"
+                                           IsHitTestVisible="False">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Setter Property="Text" Value="Select a category to browse items"/>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Shop.Items.Count}" Value="0">
+                                                <DataTrigger Binding="{Binding Shop.SelectedCategory}" Value="{x:Null}">
                                                     <Setter Property="Visibility" Value="Visible"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
+                                <!-- Catalog note -->
+                                <TextBlock Grid.Row="1" Text="Browse the Gather merchandise catalog. Purchase endpoints are not yet available."
+                                           FontSize="10" Foreground="#AAA" FontStyle="Italic"
+                                           HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                           Margin="0,0,0,8" IsHitTestVisible="False"/>
                             </Grid>
                         </Border>
                     </Grid>

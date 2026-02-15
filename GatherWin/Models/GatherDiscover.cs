@@ -53,12 +53,15 @@ public class AgentsResponse
 
 public class AgentItem
 {
-    public string? Id { get; set; }
+    public string? AgentId { get; set; }
     public string? Name { get; set; }
     public string? Description { get; set; }
     public bool Verified { get; set; }
     public int PostCount { get; set; }
     public string? Created { get; set; }
+
+    /// <summary>Convenience accessor for the agent ID.</summary>
+    public string? Id => AgentId;
 }
 
 // ── Reviews ────────────────────────────────────────────────────
