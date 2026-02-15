@@ -146,6 +146,8 @@ public partial class MainWindow : Window
         if (sender is FrameworkElement fe && fe.DataContext is DiscussionComment comment)
         {
             comment.IsExpanded = !comment.IsExpanded;
+            if (comment.IsNew)
+                comment.IsNew = false;
         }
     }
 

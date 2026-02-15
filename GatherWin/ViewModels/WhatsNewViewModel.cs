@@ -735,6 +735,7 @@ public partial class DiscussionComment : ObservableObject
     [ObservableProperty] private int _indentLevel;
     [ObservableProperty] private string? _replyToId;
     [ObservableProperty] private bool _isExpanded;
+    [ObservableProperty] private bool _isNew;
 
     /// <summary>Left margin based on indent level for visual threading.</summary>
     public double IndentMargin => IndentLevel * 24.0;

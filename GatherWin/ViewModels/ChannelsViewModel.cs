@@ -355,7 +355,8 @@ public partial class ChannelsViewModel : ObservableObject
                 Body = body,
                 Timestamp = timestamp,
                 IndentLevel = 0,
-                ReplyToId = replyTo
+                ReplyToId = replyTo,
+                IsNew = isNew
             };
 
             if (!string.IsNullOrEmpty(replyTo))
@@ -502,6 +503,13 @@ public partial class ChannelsViewModel : ObservableObject
                         SelectedChannel.ThreadedMessages.Add(threadedMsg);
                     }
                 });
+
+                // Clear NEW badges on this channel after sending
+                foreach (var m in SelectedChannel.ThreadedMessages)
+                {
+                    if (m.IsNew) m.IsNew = false;
+                }
+                SelectedChannel.NewMessageCount = 0;
 
                 var sentText = ReplyText.Trim();
                 ReplyText = string.Empty;

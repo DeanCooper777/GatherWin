@@ -312,6 +312,12 @@
                             </TextBlock>
                             <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
                                        FontSize="10" Foreground="#999"/>
+                            <!-- NEW badge for unread messages -->
+                            <Border Background="#E74C3C" CornerRadius="3" Padding="4,1" Margin="6,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IsNew, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="NEW" FontSize="9" FontWeight="Bold" Foreground="White"/>
+                            </Border>
                         </StackPanel>
                         <!-- Feature 6: Edit button on own comments -->
                         <Button Grid.Column="1" Content="···" FontWeight="Bold" FontSize="10"
