@@ -43,7 +43,10 @@ public partial class MainWindow : Window
         viewModel.Channels.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(ChannelsViewModel.SelectedChannel))
+            {
                 Dispatcher.Invoke(UpdateChannelSubscribeButton);
+                WireChannelAutoScroll();
+            }
         };
         viewModel.PropertyChanged += _onPropertyChanged;
 
@@ -298,6 +301,34 @@ public partial class MainWindow : Window
     private void CancelFeedReplyTo_Click(object sender, RoutedEventArgs e)
     {
         _viewModel.Feed.SetReplyTo(null);
+    }
+
+    // ── Channel auto-scroll ─────────────────────────────────────────
+
+    private System.Collections.Specialized.NotifyCollectionChangedEventHandler? _channelScrollHandler;
+    private System.Collections.ObjectModel.ObservableCollection<DiscussionComment>? _channelScrollTarget;
+
+    private void WireChannelAutoScroll()
+    {
+        // Unwire previous
+        if (_channelScrollHandler is not null && _channelScrollTarget is not null)
+            _channelScrollTarget.CollectionChanged -= _channelScrollHandler;
+
+        var channel = _viewModel.Channels.SelectedChannel;
+        if (channel is null) return;
+
+        _channelScrollTarget = channel.ThreadedMessages;
+        _channelScrollHandler = (_, _) =>
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                ChannelMessagesScrollViewer.ScrollToEnd();
+            }, DispatcherPriority.Loaded);
+        };
+        _channelScrollTarget.CollectionChanged += _channelScrollHandler;
+
+        // Scroll to end on initial selection too
+        Dispatcher.BeginInvoke(() => ChannelMessagesScrollViewer.ScrollToEnd(), DispatcherPriority.Loaded);
     }
 
     // ── Channel reply-to (Feature 8) ────────────────────────────────

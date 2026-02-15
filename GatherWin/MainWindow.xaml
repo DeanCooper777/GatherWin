@@ -1211,7 +1211,8 @@
                         </Border>
 
                         <!-- Threaded messages -->
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      x:Name="ChannelMessagesScrollViewer">
                             <ItemsControl ItemsSource="{Binding Channels.SelectedChannel.ThreadedMessages}"
                                           ItemTemplate="{StaticResource DiscussionCommentTemplate}"/>
                         </ScrollViewer>
