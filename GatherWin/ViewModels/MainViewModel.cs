@@ -1186,6 +1186,13 @@ public partial class MainViewModel : ObservableObject
                 $"ShowFullPosts={dialog.ShowFullPosts}, " +
                 $"FontScale={dialog.FontScalePercent}%, BadgeDuration={_newBadgeDurationMinutes}min, " +
                 $"MaxLogSizeKB={dialog.MaxLogSizeKB}");
+
+            // Restart polling if interval changed (PeriodicTimer can't change interval in-place)
+            if (IsConnected && _polling is not null &&
+                dialog.PollIntervalSeconds != _polling.CurrentIntervalSeconds)
+            {
+                _ = RestartPollingAsync();
+            }
         }
     }
 }

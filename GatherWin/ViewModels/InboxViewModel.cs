@@ -33,6 +33,13 @@ public partial class InboxViewModel : ObservableObject
     public InboxViewModel() { }
     public InboxViewModel(GatherApiClient api) { _api = api; }
 
+    /// <summary>Auto-mark message as read when selected.</summary>
+    partial void OnSelectedMessageChanged(ActivityItem? value)
+    {
+        if (value is not null && value.IsNew)
+            _ = MarkReadAsync(value);
+    }
+
     public void AddMessage(string messageId, string subject, string body, DateTimeOffset timestamp, bool isNew = true,
         string? postId = null, string? commentId = null, string? channelId = null)
     {

@@ -45,6 +45,7 @@ public class PollingService
     public event EventHandler<string>? PollError;
 
     public bool IsRunning => _pollingTask is not null && !_pollingTask.IsCompleted;
+    public int CurrentIntervalSeconds => (int)_pollInterval.TotalSeconds;
 
     /// <summary>When true, seed polls skip the channel fetch. First real poll syncs IDs without emitting.</summary>
     public bool SkipInitialChannelFetch { get; set; }

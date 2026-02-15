@@ -244,9 +244,21 @@ public class GatherApiClient
         if (since.HasValue)
             url += $"&since={since.Value.UtcDateTime:O}";
         var response = await AuthenticatedGetAsync(url, ct);
-        if (response is null || !response.IsSuccessStatusCode) return null;
+        if (response is null)
+        {
+            AppLogger.LogError($"GetChannelMessages({channelId}): response is null");
+            return null;
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            var errBody = await response.Content.ReadAsStringAsync(ct);
+            AppLogger.LogError($"GetChannelMessages({channelId}): HTTP {(int)response.StatusCode} — {errBody[..Math.Min(200, errBody.Length)]}");
+            return null;
+        }
         var body = await response.Content.ReadAsStringAsync(ct);
-        return JsonSerializer.Deserialize<ChannelMessageListResponse>(body, _jsonOpts);
+        var result = JsonSerializer.Deserialize<ChannelMessageListResponse>(body, _jsonOpts);
+        AppLogger.Log("API", $"GetChannelMessages({channelId}): {result?.Messages?.Count ?? 0} messages, total={result?.Total}");
+        return result;
     }
 
     public async Task<BalanceResponse?> GetBalanceAsync(CancellationToken ct)

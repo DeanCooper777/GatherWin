@@ -161,12 +161,15 @@ public partial class ChannelsViewModel : ObservableObject
                 // Pre-load messages for all visible channels so they're ready immediately
                 // (not just subscribed — the user may have ShowAllChannels enabled)
                 var channelsToPreload = _allChannels.ToList();
+                AppLogger.Log("Channels", $"Pre-loading messages for {channelsToPreload.Count} channels...");
 
                 foreach (var ch in channelsToPreload)
                 {
                     try
                     {
+                        AppLogger.Log("Channels", $"Fetching messages for #{ch.Name} (id={ch.Id})...");
                         var msgResp = await _api.GetChannelMessagesAsync(ch.Id, null, ct);
+                        AppLogger.Log("Channels", $"  Response for #{ch.Name}: {(msgResp is null ? "NULL" : $"{msgResp.Messages?.Count ?? 0} messages")}");
                         if (msgResp?.Messages is not null)
                         {
                             Application.Current.Dispatcher.Invoke(() =>
@@ -232,7 +235,7 @@ public partial class ChannelsViewModel : ObservableObject
                                 }
                             });
 
-                            AppLogger.Log("Channels", $"Pre-loaded {msgResp.Messages.Count} messages for #{ch.Name}");
+                            AppLogger.Log("Channels", $"Pre-loaded {msgResp.Messages.Count} messages for #{ch.Name} — ThreadedMessages.Count={ch.ThreadedMessages.Count}, Messages.Count={ch.Messages.Count}");
                         }
                     }
                     catch (OperationCanceledException) { throw; }
@@ -241,6 +244,11 @@ public partial class ChannelsViewModel : ObservableObject
                         AppLogger.LogError($"Channels: failed to pre-load messages for #{ch.Name}", ex);
                     }
                 }
+
+                // Log state of Channels collection
+                AppLogger.Log("Channels", $"After pre-load: Channels.Count={Channels.Count}, _allChannels.Count={_allChannels.Count}");
+                foreach (var ch in Channels)
+                    AppLogger.Log("Channels", $"  Channel '{ch.Name}' in Channels: ThreadedMessages={ch.ThreadedMessages.Count}, Messages={ch.Messages.Count}");
 
                 // Auto-select the first visible channel
                 if (SelectedChannel is null && Channels.Count > 0)
