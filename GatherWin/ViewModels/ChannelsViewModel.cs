@@ -162,7 +162,8 @@ public partial class ChannelsViewModel : ObservableObject
                         {
                             Application.Current.Dispatcher.Invoke(() =>
                             {
-                                foreach (var m in msgResp.Messages)
+                                // Reverse so oldest is first (chat-style: newest at bottom)
+                                foreach (var m in msgResp.Messages.AsEnumerable().Reverse())
                                 {
                                     var threadedMsg = new DiscussionComment
                                     {
@@ -390,17 +391,8 @@ public partial class ChannelsViewModel : ObservableObject
             }
             else
             {
-                // Insert chronologically (oldest first, newest at bottom) for chat-style order
-                int pos = channel.ThreadedMessages.Count;
-                for (int i = 0; i < channel.ThreadedMessages.Count; i++)
-                {
-                    if (channel.ThreadedMessages[i].Timestamp > timestamp && channel.ThreadedMessages[i].IndentLevel == 0)
-                    {
-                        pos = i;
-                        break;
-                    }
-                }
-                channel.ThreadedMessages.Insert(pos, threadedMsg);
+                // Append at bottom (chat-style: oldest top, newest bottom)
+                channel.ThreadedMessages.Add(threadedMsg);
             }
 
             if (isNew)
