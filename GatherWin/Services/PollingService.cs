@@ -25,7 +25,7 @@ public class PollingService
     private readonly Dictionary<string, string> _channelNames = new();
     private readonly HashSet<string> _knownChannelIds = new();
     private DateTimeOffset _feedSinceTimestamp;
-    private DateTimeOffset _channelSinceTimestamp;
+    // Channel polling does not use a `since` timestamp — see CheckChannelsAsync for details.
     /// <summary>
     /// Number of poll cycles remaining that should be treated as "initial load" (seeding).
     /// The Gather API can return subtly different data between consecutive polls, so we
@@ -84,7 +84,7 @@ public class PollingService
         _watchedPostIds = watchedPostIds;
         _pollInterval = TimeSpan.FromSeconds(intervalSeconds);
         _feedSinceTimestamp = DateTimeOffset.UtcNow.AddDays(-7);
-        _channelSinceTimestamp = DateTimeOffset.UtcNow.AddDays(-7);
+        // No channel since timestamp — channels fetch all recent messages each poll.
     }
 
     public void UpdateSettings(string[] watchedPostIds, int intervalSeconds)
@@ -419,7 +419,10 @@ public class PollingService
                 _seenChannelMessageIds[channel.Id] = seenIds;
             }
 
-            var msgResp = await _api.GetChannelMessagesAsync(channel.Id, _channelSinceTimestamp, ct);
+            // Fetch without `since` filter — the Gather API's since parameter is unreliable
+            // for channel messages (newly created messages don't appear in filtered queries).
+            // We rely on seenIds for deduplication instead.
+            var msgResp = await _api.GetChannelMessagesAsync(channel.Id, null, ct);
             if (msgResp is null) continue;
 
             var messages = msgResp.Messages ?? [];
@@ -451,7 +454,7 @@ public class PollingService
                 continue;
             }
 
-            AppLogger.Log("Poll", $"Channel #{channelName}: API returned {messages.Count} msgs, seenIds has {seenIds.Count}, since={_channelSinceTimestamp:O}");
+            AppLogger.Log("Poll", $"Channel #{channelName}: API returned {messages.Count} msgs, seenIds has {seenIds.Count}");
 
             foreach (var msg in messages)
             {
@@ -479,10 +482,8 @@ public class PollingService
             }
         }
 
-        // Use a 5-minute lookback buffer to avoid missing messages due to
-        // server-side indexing delay (the Gather API may not return newly created
-        // messages immediately in `since` queries). The seenIds set prevents duplicates.
-        _channelSinceTimestamp = DateTimeOffset.UtcNow.AddMinutes(-5);
+        // No timestamp tracking needed — we fetch all recent messages each cycle
+        // and rely on seenIds for dedup (the Gather API's `since` filter is unreliable).
     }
 
     private static DateTimeOffset ParseTimestamp(string? ts)
