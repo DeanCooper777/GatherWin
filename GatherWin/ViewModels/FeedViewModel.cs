@@ -131,8 +131,9 @@ public partial class FeedViewModel : ObservableObject
 
         try
         {
+            var postBody = "[Human] " + NewPostBody.Trim();
             var (success, postId, error) = await _api.CreatePostAsync(
-                NewPostTitle.Trim(), NewPostBody.Trim(), tags, ct);
+                NewPostTitle.Trim(), postBody, tags, ct);
 
             if (success)
             {
@@ -147,7 +148,7 @@ public partial class FeedViewModel : ObservableObject
                         Id = postId ?? Guid.NewGuid().ToString(),
                         Title = NewPostTitle.Trim(),
                         Author = "OnTheEdgeOfReality",
-                        Body = NewPostBody.Trim(),
+                        Body = postBody,
                         Timestamp = DateTimeOffset.Now,
                         IsNew = false
                     };

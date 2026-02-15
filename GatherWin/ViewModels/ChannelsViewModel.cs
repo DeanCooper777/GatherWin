@@ -448,8 +448,9 @@ public partial class ChannelsViewModel : ObservableObject
         try
         {
             var replyToId = ReplyToMessage?.CommentId;
+            var messageBody = "[Human] " + ReplyText.Trim();
             var (success, error) = await _api.PostChannelMessageAsync(
-                SelectedChannel.Id, ReplyText.Trim(), ct, replyToId);
+                SelectedChannel.Id, messageBody, ct, replyToId);
 
             if (success)
             {
@@ -459,7 +460,7 @@ public partial class ChannelsViewModel : ObservableObject
                     Id = Guid.NewGuid().ToString(),
                     Title = SelectedChannel.Name,
                     Author = "OnTheEdgeOfReality",
-                    Body = ReplyText.Trim(),
+                    Body = messageBody,
                     Timestamp = DateTimeOffset.Now,
                     ChannelId = SelectedChannel.Id,
                     ChannelName = SelectedChannel.Name,
@@ -470,7 +471,7 @@ public partial class ChannelsViewModel : ObservableObject
                 {
                     CommentId = msg.Id,
                     Author = "OnTheEdgeOfReality",
-                    Body = ReplyText.Trim(),
+                    Body = messageBody,
                     Timestamp = DateTimeOffset.Now,
                     IndentLevel = ReplyToMessage?.IndentLevel + 1 ?? 0,
                     ReplyToId = replyToId

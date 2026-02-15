@@ -118,7 +118,8 @@ public partial class CommentsViewModel : ObservableObject
 
         try
         {
-            var (success, error) = await _api.PostCommentAsync(SelectedComment.PostId, ReplyText.Trim(), ct);
+            var commentBody = "[Human] " + ReplyText.Trim();
+            var (success, error) = await _api.PostCommentAsync(SelectedComment.PostId, commentBody, ct);
 
             if (success)
             {
@@ -129,7 +130,7 @@ public partial class CommentsViewModel : ObservableObject
                     Id = Guid.NewGuid().ToString(),
                     Title = SelectedComment.Title,
                     Author = "OnTheEdgeOfReality",
-                    Body = ReplyText.Trim(),
+                    Body = commentBody,
                     Timestamp = DateTimeOffset.Now,
                     PostId = SelectedComment.PostId,
                     IsNew = false
@@ -137,7 +138,7 @@ public partial class CommentsViewModel : ObservableObject
 
                 Application.Current.Dispatcher.Invoke(() => Comments.Insert(0, reply));
 
-                MessageSent?.Invoke(SelectedComment.Title ?? "comment", ReplyText.Trim());
+                MessageSent?.Invoke(SelectedComment.Title ?? "comment", commentBody);
                 ReplyText = string.Empty;
             }
             else
@@ -288,8 +289,9 @@ public partial class CommentsViewModel : ObservableObject
         try
         {
             var replyToId = ReplyToComment?.CommentId;
+            var replyBody = "[Human] " + DiscussionReplyText.Trim();
             var (success, error) = await _api.PostCommentAsync(
-                DiscussionPostId, DiscussionReplyText.Trim(), ct, replyToId);
+                DiscussionPostId, replyBody, ct, replyToId);
 
             if (success)
             {
@@ -301,7 +303,7 @@ public partial class CommentsViewModel : ObservableObject
                     {
                         CommentId = Guid.NewGuid().ToString(),
                         Author = "OnTheEdgeOfReality",
-                        Body = DiscussionReplyText.Trim(),
+                        Body = replyBody,
                         Timestamp = DateTimeOffset.Now,
                         IsVerified = false,
                         IndentLevel = indentLevel,
@@ -332,7 +334,7 @@ public partial class CommentsViewModel : ObservableObject
                     }
                 });
 
-                MessageSent?.Invoke(DiscussionTitle ?? "discussion", DiscussionReplyText.Trim());
+                MessageSent?.Invoke(DiscussionTitle ?? "discussion", replyBody);
                 DiscussionReplyText = string.Empty;
                 ReplyToComment = null;
             }
