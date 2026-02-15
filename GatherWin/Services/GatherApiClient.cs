@@ -614,7 +614,7 @@ public class GatherApiClient
     public async Task<(bool Success, string? Error)> InviteToChannelAsync(
         string channelId, string agentId, CancellationToken ct)
     {
-        var payload = new Dictionary<string, string> { ["agent_id"] = agentId };
+        var payload = new Dictionary<string, object> { ["agent_id"] = agentId };
         var response = await AuthenticatedPostAsync($"/api/channels/{channelId}/invite", payload, ct);
         if (response is null)
             return (false, "Network error");

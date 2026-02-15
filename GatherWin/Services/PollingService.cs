@@ -52,6 +52,9 @@ public class PollingService
     /// <summary>When true, the first poll skips the feed fetch (already pre-loaded by MainViewModel).</summary>
     public bool SkipInitialFeedFetch { get; set; }
 
+    /// <summary>When true, the first poll skips the inbox fetch (already pre-loaded by MainViewModel).</summary>
+    public bool SkipInitialInboxFetch { get; set; }
+
     /// <summary>Seed the seen-feed-post-IDs set so pre-loaded posts aren't duplicated.</summary>
     public void SeedFeedPostIds(IEnumerable<string> ids)
     {
@@ -76,6 +79,13 @@ public class PollingService
         }
         foreach (var id in ids)
             set.Add(id);
+    }
+
+    /// <summary>Seed inbox fingerprints so pre-loaded messages aren't duplicated.</summary>
+    public void SeedInboxFingerprints(IEnumerable<InboxMessage> messages)
+    {
+        foreach (var m in messages)
+            _seenInboxMessageIds.Add(InboxFingerprint(m));
     }
 
     public PollingService(GatherApiClient api, string agentId, string[] watchedPostIds, int intervalSeconds)
@@ -255,6 +265,12 @@ public class PollingService
 
     private async Task CheckInboxAsync(CancellationToken ct)
     {
+        if (IsSeeding && SkipInitialInboxFetch)
+        {
+            AppLogger.Log("Poll", "Skipping initial inbox fetch (pre-loaded)");
+            return;
+        }
+
         var inbox = await _api.GetInboxAsync(ct);
         if (inbox is null) return;
 
@@ -262,28 +278,10 @@ public class PollingService
 
         if (IsSeeding)
         {
-            var isFirstSeed = _seedPollsRemaining == 2;
             AppLogger.Log("Poll", $"Seeding {messages.Count} inbox messages");
             foreach (var m in messages)
             {
-                // Use content fingerprint — the API may return unstable/null IDs
                 _seenInboxMessageIds.Add(InboxFingerprint(m));
-
-                // Only populate the UI on the very first seed poll
-                if (isFirstSeed)
-                {
-                    NewInboxMessageReceived?.Invoke(this, new InboxMessageEventArgs
-                    {
-                        MessageId = m.Id ?? "",
-                        Subject = m.Subject ?? m.Type ?? "message",
-                        Body = m.Body ?? "(empty)",
-                        Timestamp = ParseTimestamp(m.Created),
-                        IsInitialLoad = true,
-                        PostId = m.PostId,
-                        CommentId = m.CommentId,
-                        ChannelId = m.ChannelId
-                    });
-                }
             }
             return;
         }

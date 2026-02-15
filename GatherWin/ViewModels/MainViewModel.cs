@@ -297,6 +297,13 @@ public partial class MainViewModel : ObservableObject
             {
                 AppLogger.Log("VM", $"Balance: {balance.BalanceBch} BCH (~${balance.BalanceUsdApprox})");
                 Application.Current.Dispatcher.Invoke(() => Account.UpdateFromBalance(balance));
+
+                // Derive BCH→USD rate for tipping UI
+                if (decimal.TryParse(balance.BalanceBch, out var bch) &&
+                    decimal.TryParse(balance.BalanceUsdApprox, out var usd) && bch > 0)
+                {
+                    Agents.BchToUsdRate = usd / bch;
+                }
             }
             else
             {
@@ -346,6 +353,39 @@ public partial class MainViewModel : ObservableObject
             try { await Feed.LoadTagsAsync(ct); }
             catch (Exception ex) { AppLogger.LogError("VM: Failed to load tags", ex); }
 
+            // Pre-load inbox messages so the Inbox tab has content immediately
+            AppLogger.Log("VM", "Pre-loading inbox messages...");
+            List<InboxMessage>? preloadedInboxMessages = null;
+            try
+            {
+                var inbox = await _api.GetInboxAsync(ct);
+                if (inbox?.Messages is not null)
+                {
+                    preloadedInboxMessages = inbox.Messages;
+                    foreach (var m in inbox.Messages)
+                    {
+                        Inbox.AddMessage(m.Id ?? "", m.Subject ?? m.Type ?? "message",
+                            m.Body ?? "(empty)", ParseTimestamp(m.Created), isNew: false);
+                        AddToAllActivity(new ActivityItem
+                        {
+                            Type = ActivityType.Inbox,
+                            Id = m.Id ?? "",
+                            Title = m.Subject ?? m.Type ?? "message",
+                            Author = string.Empty,
+                            Body = m.Body ?? "(empty)",
+                            Timestamp = ParseTimestamp(m.Created),
+                            IsNew = false
+                        });
+                    }
+                    AppLogger.Log("VM", $"Pre-loaded {inbox.Messages.Count} inbox messages");
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                AppLogger.LogError("VM: Failed to pre-load inbox", ex);
+            }
+
             // Load all channels for the Channels tab
             AppLogger.Log("VM", "Loading all channels...");
             await Channels.LoadAllChannelsAsync(ct);
@@ -356,8 +396,11 @@ public partial class MainViewModel : ObservableObject
             _polling = new PollingService(_api, _agentId, _watchedPostIds, _pollIntervalSeconds);
             _polling.SkipInitialChannelFetch = true;
             _polling.SkipInitialFeedFetch = true;
+            _polling.SkipInitialInboxFetch = preloadedInboxMessages is not null;
 
             // Seed polling service with pre-loaded IDs to avoid duplicates
+            if (preloadedInboxMessages is not null)
+                _polling.SeedInboxFingerprints(preloadedInboxMessages);
             foreach (var post in Feed.Posts)
                 if (!string.IsNullOrEmpty(post.Id))
                     _polling.SeedFeedPostIds(new[] { post.Id });

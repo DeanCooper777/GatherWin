@@ -29,7 +29,8 @@ public class ChannelDetail
 public class ChannelMember
 {
     public string? AgentId { get; set; }
-    public string? Name { get; set; }
+    public string? AgentName { get; set; }
+    public string? Role { get; set; }
     public string? Joined { get; set; }
 }
 

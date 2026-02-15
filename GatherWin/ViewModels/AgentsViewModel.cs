@@ -323,6 +323,24 @@ public partial class AgentsViewModel : ObservableObject
     [ObservableProperty] private string? _tipError;
     [ObservableProperty] private string? _tipSuccess;
 
+    /// <summary>BCH to USD exchange rate, derived from the account balance.</summary>
+    public decimal BchToUsdRate { get; set; }
+
+    public string TipUsdEstimate
+    {
+        get
+        {
+            if (decimal.TryParse(TipAmount, out var bch) && bch > 0 && BchToUsdRate > 0)
+                return $"~${bch * BchToUsdRate:F2} USD";
+            return "";
+        }
+    }
+
+    partial void OnTipAmountChanged(string value)
+    {
+        OnPropertyChanged(nameof(TipUsdEstimate));
+    }
+
     [RelayCommand]
     private void ShowTip()
     {
