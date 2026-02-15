@@ -158,16 +158,15 @@ public partial class ChannelsViewModel : ObservableObject
 
                 AppLogger.Log("Channels", $"Loaded {response.Channels.Count} channels (max={MaxChannels})");
 
-                // Pre-load messages for subscribed channels so they're visible immediately
-                var subscribedChannels = _allChannels
-                    .Where(c => _subscribedChannelIds.Contains(c.Id))
-                    .ToList();
+                // Pre-load messages for all visible channels so they're ready immediately
+                // (not just subscribed — the user may have ShowAllChannels enabled)
+                var channelsToPreload = _allChannels.ToList();
 
-                foreach (var ch in subscribedChannels)
+                foreach (var ch in channelsToPreload)
                 {
                     try
                     {
-                        var msgResp = await _api.GetChannelMessagesAsync(ch.Id, DateTimeOffset.UtcNow.AddDays(-7), ct);
+                        var msgResp = await _api.GetChannelMessagesAsync(ch.Id, null, ct);
                         if (msgResp?.Messages is not null)
                         {
                             Application.Current.Dispatcher.Invoke(() =>
@@ -243,12 +242,12 @@ public partial class ChannelsViewModel : ObservableObject
                     }
                 }
 
-                // Auto-select the first subscribed channel if only one
-                if (SelectedChannel is null && subscribedChannels.Count > 0)
+                // Auto-select the first visible channel
+                if (SelectedChannel is null && Channels.Count > 0)
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        SelectedChannel = Channels.FirstOrDefault(c => c.Id == subscribedChannels[0].Id);
+                        SelectedChannel = Channels[0];
                     });
                 }
             }

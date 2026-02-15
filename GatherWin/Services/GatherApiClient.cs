@@ -590,7 +590,7 @@ public class GatherApiClient
         var payload = new Dictionary<string, object>
         {
             ["to"] = toAgentId,
-            ["amount_bch"] = amountBch
+            ["amount_bch"] = amountBch.ToString("G")
         };
         if (!string.IsNullOrWhiteSpace(message))
             payload["message"] = message.Trim();
