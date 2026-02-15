@@ -665,6 +665,8 @@ public partial class MainViewModel : ObservableObject
         polling.NewFeedPostReceived += _onFeed;
         polling.NewChannelMessageReceived += _onChannel;
         polling.NewChannelDiscovered += _onNewChannel;
+        polling.InboxUnreadCountUpdated += (_, count) =>
+            Application.Current.Dispatcher.Invoke(() => Inbox.UnreadCount = count);
         polling.PollCycleCompleted += _onPollCycle;
         polling.PollError += _onPollError;
         polling.InitialStateLoaded += _onInitialState;

@@ -40,6 +40,7 @@ public class PollingService
     public event EventHandler<ChannelMessageEventArgs>? NewChannelMessageReceived;
     public event EventHandler<NewChannelDiscoveredEventArgs>? NewChannelDiscovered;
     public event EventHandler<InitialStateEventArgs>? InitialStateLoaded;
+    public event EventHandler<int>? InboxUnreadCountUpdated;
     public event EventHandler<DateTimeOffset>? PollCycleCompleted;
     public event EventHandler<string>? PollError;
 
@@ -162,6 +163,18 @@ public class PollingService
                 AppLogger.Log("Poll", "Initial state seeded (2 cycles)");
                 InitialStateLoaded?.Invoke(this, new InitialStateEventArgs());
             }
+        }
+
+        // Fast unread count check (lightweight endpoint)
+        try
+        {
+            var unread = await _api.GetInboxUnreadCountAsync(ct);
+            if (unread.HasValue)
+                InboxUnreadCountUpdated?.Invoke(this, unread.Value);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Poll: unread count check failed", ex);
         }
 
         AppLogger.Log("Poll", "Poll cycle completed");

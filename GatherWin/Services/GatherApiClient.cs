@@ -126,6 +126,16 @@ public class GatherApiClient
         return JsonSerializer.Deserialize<InboxResponse>(body, _jsonOpts);
     }
 
+    /// <summary>Fast unread count endpoint — lightweight alternative to fetching full inbox.</summary>
+    public async Task<int?> GetInboxUnreadCountAsync(CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync("/api/inbox/unread", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var result = JsonSerializer.Deserialize<InboxUnreadResponse>(body, _jsonOpts);
+        return result?.Unread;
+    }
+
     public async Task<FeedResponse?> GetFeedPostsAsync(DateTimeOffset? since, CancellationToken ct, string sort = "newest")
     {
         var url = $"/api/posts?limit=50&sort={sort}";

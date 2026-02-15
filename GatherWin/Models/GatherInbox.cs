@@ -1,5 +1,10 @@
 namespace GatherWin.Models;
 
+public class InboxUnreadResponse
+{
+    public int Unread { get; set; }
+}
+
 public class InboxResponse
 {
     public List<InboxMessage>? Messages { get; set; }

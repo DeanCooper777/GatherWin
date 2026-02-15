@@ -759,6 +759,12 @@
                                 Visibility="{Binding Inbox.NewCount, Converter={StaticResource NotZeroToVis}}">
                             <TextBlock Text="{Binding Inbox.NewCount}" Foreground="White" FontSize="10"/>
                         </Border>
+                        <TextBlock FontSize="10" Foreground="#999" VerticalAlignment="Center" Margin="4,0,0,0"
+                                   Visibility="{Binding Inbox.UnreadCount, Converter={StaticResource NotZeroToVis}}">
+                            <Run Text="("/>
+                            <Run Text="{Binding Inbox.UnreadCount, Mode=OneWay}"/>
+                            <Run Text=" unread)"/>
+                        </TextBlock>
                     </StackPanel>
                 </TabItem.Header>
                 <Grid Margin="8">
