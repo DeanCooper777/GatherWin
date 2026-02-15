@@ -458,10 +458,10 @@ public class PollingService
 
             foreach (var msg in messages)
             {
-                if (msg.Id is null) { AppLogger.Log("Poll", $"  msg: null ID, skipping"); continue; }
-                if (!seenIds.Add(msg.Id)) { AppLogger.Log("Poll", $"  msg {msg.Id}: already seen"); continue; }
+                if (msg.Id is null) continue;
+                if (!seenIds.Add(msg.Id)) continue;
 
-                AppLogger.Log("Poll", $"NEW channel msg in #{channelName} by {msg.AuthorName ?? msg.AuthorId}: {(msg.Body ?? "")[..Math.Min(50, (msg.Body ?? "").Length)]}...");
+                AppLogger.Log("Poll", $"New channel msg in #{channelName} by {msg.AuthorName ?? msg.AuthorId}: {(msg.Body ?? "")[..Math.Min(50, (msg.Body ?? "").Length)]}...");
                 NewChannelMessageReceived?.Invoke(this, new ChannelMessageEventArgs
                 {
                     ChannelId = channel.Id,

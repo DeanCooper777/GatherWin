@@ -1265,8 +1265,8 @@
                                 </Grid>
 
                                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
-                                    <TextBlock Text="{Binding Channels.ReplyText, Converter={StaticResource CharCount}}"
-                                               Foreground="{Binding Channels.ReplyText, Converter={StaticResource CharCountBrush}}"
+                                    <TextBlock Text="{Binding Channels.ReplyText, Converter={StaticResource CharCount}, ConverterParameter=5000}"
+                                               Foreground="{Binding Channels.ReplyText, Converter={StaticResource CharCountBrush}, ConverterParameter=5000}"
                                                FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="{Binding Channels.SendError}" Foreground="#E74C3C"
                                                FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
