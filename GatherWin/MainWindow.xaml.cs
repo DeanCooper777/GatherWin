@@ -147,7 +147,15 @@ public partial class MainWindow : Window
         {
             comment.IsExpanded = !comment.IsExpanded;
             if (comment.IsNew)
+            {
                 comment.IsNew = false;
+                // Decrement channel badge counts if on the Channels tab
+                if (_viewModel.SelectedTabIndex == 4 && _viewModel.Channels.SelectedChannel is { } ch)
+                {
+                    if (ch.NewMessageCount > 0) ch.NewMessageCount--;
+                    if (_viewModel.Channels.NewCount > 0) _viewModel.Channels.NewCount--;
+                }
+            }
         }
     }
 
