@@ -23,6 +23,7 @@ public class PollingService
     private readonly HashSet<string> _seenFeedPostIds = new();
     private readonly Dictionary<string, HashSet<string>> _seenChannelMessageIds = new();
     private readonly Dictionary<string, string> _channelNames = new();
+    private readonly HashSet<string> _knownChannelIds = new();
     private DateTimeOffset _feedSinceTimestamp;
     private DateTimeOffset _channelSinceTimestamp;
     /// <summary>
@@ -37,6 +38,7 @@ public class PollingService
     public event EventHandler<InboxMessageEventArgs>? NewInboxMessageReceived;
     public event EventHandler<FeedPostEventArgs>? NewFeedPostReceived;
     public event EventHandler<ChannelMessageEventArgs>? NewChannelMessageReceived;
+    public event EventHandler<NewChannelDiscoveredEventArgs>? NewChannelDiscovered;
     public event EventHandler<InitialStateEventArgs>? InitialStateLoaded;
     public event EventHandler<DateTimeOffset>? PollCycleCompleted;
     public event EventHandler<string>? PollError;
@@ -54,6 +56,13 @@ public class PollingService
     {
         foreach (var id in ids)
             _seenFeedPostIds.Add(id);
+    }
+
+    /// <summary>Seed the known channel IDs so pre-loaded channels aren't reported as new.</summary>
+    public void SeedChannelIds(IEnumerable<string> ids)
+    {
+        foreach (var id in ids)
+            _knownChannelIds.Add(id);
     }
 
     /// <summary>Seed the seen-channel-message-IDs so pre-loaded messages aren't duplicated.</summary>
@@ -387,6 +396,23 @@ public class PollingService
 
             var channelName = _channelNames.GetValueOrDefault(channel.Id, channel.Id);
 
+            // Detect newly appeared channels (created externally or by other agents)
+            if (!IsSeeding && _knownChannelIds.Add(channel.Id))
+            {
+                AppLogger.Log("Poll", $"New channel discovered: #{channelName} ({channel.Id})");
+                NewChannelDiscovered?.Invoke(this, new NewChannelDiscoveredEventArgs
+                {
+                    ChannelId = channel.Id,
+                    ChannelName = channelName,
+                    Description = channel.Description ?? "",
+                    MemberCount = channel.MemberCount
+                });
+            }
+            else if (IsSeeding)
+            {
+                _knownChannelIds.Add(channel.Id);
+            }
+
             if (!_seenChannelMessageIds.TryGetValue(channel.Id, out var seenIds))
             {
                 seenIds = new HashSet<string>();
@@ -521,4 +547,12 @@ public class InitialStateEventArgs : EventArgs
     public int CommentCount { get; init; }
     public int Score { get; init; }
     public bool Verified { get; init; }
+}
+
+public class NewChannelDiscoveredEventArgs : EventArgs
+{
+    public required string ChannelId { get; init; }
+    public required string ChannelName { get; init; }
+    public required string Description { get; init; }
+    public int MemberCount { get; init; }
 }

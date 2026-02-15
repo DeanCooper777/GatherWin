@@ -40,6 +40,7 @@ public partial class MainViewModel : ObservableObject
     private EventHandler<InboxMessageEventArgs>? _onInbox;
     private EventHandler<FeedPostEventArgs>? _onFeed;
     private EventHandler<ChannelMessageEventArgs>? _onChannel;
+    private EventHandler<NewChannelDiscoveredEventArgs>? _onNewChannel;
     private EventHandler<DateTimeOffset>? _onPollCycle;
     private EventHandler<string>? _onPollError;
     private EventHandler<InitialStateEventArgs>? _onInitialState;
@@ -342,6 +343,7 @@ public partial class MainViewModel : ObservableObject
                 if (!string.IsNullOrEmpty(post.Id))
                     _polling.SeedFeedPostIds(new[] { post.Id });
 
+            _polling.SeedChannelIds(Channels.Channels.Select(c => c.Id));
             foreach (var ch in Channels.Channels)
                 _polling.SeedChannelMessageIds(ch.Id,
                     ch.Messages.Select(m => m.Id).Where(id => !string.IsNullOrEmpty(id)));
@@ -557,6 +559,26 @@ public partial class MainViewModel : ObservableObject
             if (isNew) NewActivityArrived?.Invoke(this, EventArgs.Empty);
         };
 
+        _onNewChannel = (_, e) =>
+        {
+            PollingLog.WriteEntry($"New channel discovered: #{e.ChannelName}", Models.LogEntryType.Channel);
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Add the new channel to the ChannelsViewModel if it's not already there
+                if (!Channels.Channels.Any(c => c.Id == e.ChannelId))
+                {
+                    var info = new ChannelInfo
+                    {
+                        Id = e.ChannelId,
+                        Name = e.ChannelName,
+                        Description = e.Description,
+                        MemberCount = e.MemberCount
+                    };
+                    Channels.AddDiscoveredChannel(info);
+                }
+            });
+        };
+
         _onPollCycle = (_, time) =>
         {
             // Build poll summary
@@ -626,6 +648,7 @@ public partial class MainViewModel : ObservableObject
         polling.NewInboxMessageReceived += _onInbox;
         polling.NewFeedPostReceived += _onFeed;
         polling.NewChannelMessageReceived += _onChannel;
+        polling.NewChannelDiscovered += _onNewChannel;
         polling.PollCycleCompleted += _onPollCycle;
         polling.PollError += _onPollError;
         polling.InitialStateLoaded += _onInitialState;
@@ -639,6 +662,7 @@ public partial class MainViewModel : ObservableObject
         if (_onInbox is not null) _polling.NewInboxMessageReceived -= _onInbox;
         if (_onFeed is not null) _polling.NewFeedPostReceived -= _onFeed;
         if (_onChannel is not null) _polling.NewChannelMessageReceived -= _onChannel;
+        if (_onNewChannel is not null) _polling.NewChannelDiscovered -= _onNewChannel;
         if (_onPollCycle is not null) _polling.PollCycleCompleted -= _onPollCycle;
         if (_onPollError is not null) _polling.PollError -= _onPollError;
         if (_onInitialState is not null) _polling.InitialStateLoaded -= _onInitialState;
@@ -647,6 +671,7 @@ public partial class MainViewModel : ObservableObject
         _onInbox = null;
         _onFeed = null;
         _onChannel = null;
+        _onNewChannel = null;
         _onPollCycle = null;
         _onPollError = null;
         _onInitialState = null;

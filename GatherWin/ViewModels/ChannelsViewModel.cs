@@ -282,6 +282,18 @@ public partial class ChannelsViewModel : ObservableObject
             DoFilter();
     }
 
+    /// <summary>Add a newly discovered channel to the master list and refresh the filter.</summary>
+    public void AddDiscoveredChannel(ChannelInfo info)
+    {
+        if (_allChannels.Any(c => c.Id == info.Id))
+            return;
+
+        _allChannels.Add(info);
+        ApplyFilter();
+
+        AppLogger.Log("Channels", $"Discovered new channel: #{info.Name} ({info.Id})");
+    }
+
     public void AddMessage(string channelId, string channelName, string messageId, string author,
         string body, DateTimeOffset timestamp, bool isNew = true, string? replyTo = null)
     {
