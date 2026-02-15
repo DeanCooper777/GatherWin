@@ -272,6 +272,8 @@ public partial class FeedViewModel : ObservableObject
     [RelayCommand]
     private async Task SendFeedReplyAsync(CancellationToken ct)
     {
+        if (IsSendingDiscussionReply) return; // Guard against double-click
+
         if (string.IsNullOrEmpty(DiscussionPostId) || string.IsNullOrWhiteSpace(DiscussionReplyText))
             return;
 

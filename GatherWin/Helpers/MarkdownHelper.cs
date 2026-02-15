@@ -11,7 +11,7 @@ namespace GatherWin.Helpers;
 
 /// <summary>
 /// Attached properties for rendering basic markdown in a RichTextBox.
-/// Supports: # headings, **bold**, *italic*, `code`, [text](url), and line breaks.
+/// Supports: # headings, **bold**, *italic*, `code`, ```code blocks```, [text](url), and line breaks.
 /// </summary>
 public static class MarkdownHelper
 {
@@ -51,10 +51,132 @@ public static class MarkdownHelper
     {
         var doc = new FlowDocument { PagePadding = new Thickness(0) };
 
-        // Split by double newlines for paragraphs
-        var paragraphs = Regex.Split(markdown, @"\r?\n\r?\n");
+        // Split into alternating text/code segments by fenced code blocks
+        var segments = SplitCodeBlocks(markdown);
 
         bool isFirst = true;
+        foreach (var (text, isCode) in segments)
+        {
+            if (string.IsNullOrWhiteSpace(text)) continue;
+
+            if (isCode)
+            {
+                AddCodeBlock(doc, text);
+            }
+            else
+            {
+                AddMarkdownText(doc, text, ref isFirst, author);
+            }
+        }
+
+        if (doc.Blocks.Count == 0)
+            doc.Blocks.Add(new Paragraph());
+
+        return doc;
+    }
+
+    // ── Fenced code block splitting ───────────────────────────────
+
+    private static readonly Regex FencePattern = new(
+        @"^```", RegexOptions.Multiline | RegexOptions.Compiled);
+
+    private static List<(string Text, bool IsCode)> SplitCodeBlocks(string markdown)
+    {
+        var segments = new List<(string, bool)>();
+        var matches = FencePattern.Matches(markdown);
+
+        if (matches.Count == 0)
+        {
+            segments.Add((markdown, false));
+            return segments;
+        }
+
+        int lastEnd = 0;
+        bool inCode = false;
+
+        foreach (Match match in matches)
+        {
+            if (!inCode)
+            {
+                // Text before the opening fence
+                if (match.Index > lastEnd)
+                    segments.Add((markdown[lastEnd..match.Index], false));
+
+                // Skip the ``` line (including optional language tag and newline)
+                var lineEnd = markdown.IndexOf('\n', match.Index);
+                lastEnd = lineEnd >= 0 ? lineEnd + 1 : markdown.Length;
+                inCode = true;
+            }
+            else
+            {
+                // Code content between fences
+                var code = markdown[lastEnd..match.Index].TrimEnd('\r', '\n');
+                if (code.Length > 0)
+                    segments.Add((code, true));
+
+                // Skip the closing ``` line
+                var lineEnd = markdown.IndexOf('\n', match.Index);
+                lastEnd = lineEnd >= 0 ? lineEnd + 1 : markdown.Length;
+                inCode = false;
+            }
+        }
+
+        // Handle remaining text after last fence
+        if (lastEnd < markdown.Length)
+        {
+            var remaining = markdown[lastEnd..];
+            if (inCode)
+            {
+                // Unclosed code block — treat rest as code
+                segments.Add((remaining.TrimEnd('\r', '\n'), true));
+            }
+            else if (!string.IsNullOrWhiteSpace(remaining))
+            {
+                segments.Add((remaining, false));
+            }
+        }
+
+        return segments;
+    }
+
+    // ── Code block rendering ──────────────────────────────────────
+
+    private static readonly SolidColorBrush CodeBackground =
+        new(Color.FromRgb(0xF5, 0xF5, 0xF5));
+    private static readonly SolidColorBrush CodeBorder =
+        new(Color.FromRgb(0xDD, 0xDD, 0xDD));
+    private static readonly FontFamily ConsolasFont = new("Consolas");
+
+    private static void AddCodeBlock(FlowDocument doc, string code)
+    {
+        var paragraph = new Paragraph
+        {
+            FontFamily = ConsolasFont,
+            FontSize = 11.5,
+            Background = CodeBackground,
+            Padding = new Thickness(8),
+            Margin = new Thickness(0, 4, 0, 4),
+            BorderBrush = CodeBorder,
+            BorderThickness = new Thickness(1)
+        };
+
+        var lines = code.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (i > 0) paragraph.Inlines.Add(new LineBreak());
+            paragraph.Inlines.Add(new Run(lines[i].TrimEnd('\r')));
+        }
+
+        doc.Blocks.Add(paragraph);
+    }
+
+    // ── Normal markdown text rendering ────────────────────────────
+
+    private static void AddMarkdownText(FlowDocument doc, string text,
+        ref bool isFirst, string? author)
+    {
+        var paragraphs = Regex.Split(text, @"\r?\n\r?\n");
+
         foreach (var paraText in paragraphs)
         {
             if (string.IsNullOrWhiteSpace(paraText)) continue;
@@ -115,12 +237,9 @@ public static class MarkdownHelper
             if (paragraph.Inlines.Count > 0)
                 doc.Blocks.Add(paragraph);
         }
-
-        if (doc.Blocks.Count == 0)
-            doc.Blocks.Add(new Paragraph());
-
-        return doc;
     }
+
+    // ── Inline patterns ───────────────────────────────────────────
 
     private static readonly Regex HeadingPattern = new(
         @"^(#{1,6})\s+(.+)$", RegexOptions.Compiled);
@@ -164,7 +283,7 @@ public static class MarkdownHelper
             {
                 var run = new Run(match.Groups[10].Value)
                 {
-                    FontFamily = new FontFamily("Consolas"),
+                    FontFamily = ConsolasFont,
                     Background = new SolidColorBrush(Color.FromRgb(0xEE, 0xEE, 0xEE))
                 };
                 inlines.Add(run);

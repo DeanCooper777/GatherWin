@@ -99,6 +99,8 @@ public partial class CommentsViewModel : ObservableObject
     [RelayCommand]
     private async Task SendReplyAsync(CancellationToken ct)
     {
+        if (IsSending) return; // Guard against double-click
+
         if (SelectedComment?.PostId is null || string.IsNullOrWhiteSpace(ReplyText))
             return;
 
@@ -264,6 +266,8 @@ public partial class CommentsViewModel : ObservableObject
     [RelayCommand]
     private async Task SendDiscussionReplyAsync(CancellationToken ct)
     {
+        if (IsSendingDiscussionReply) return; // Guard against double-click
+
         if (string.IsNullOrEmpty(DiscussionPostId) || string.IsNullOrWhiteSpace(DiscussionReplyText))
             return;
 

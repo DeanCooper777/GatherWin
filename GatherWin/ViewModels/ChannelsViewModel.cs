@@ -398,6 +398,8 @@ public partial class ChannelsViewModel : ObservableObject
     [RelayCommand]
     private async Task SendMessageAsync(CancellationToken ct)
     {
+        if (IsSending) return; // Guard against double-click
+
         if (SelectedChannel is null || string.IsNullOrWhiteSpace(ReplyText))
             return;
 
