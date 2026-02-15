@@ -813,9 +813,10 @@
                         <ColumnDefinition Width="*" MinWidth="250"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Left: Compose + Feed list -->
+                    <!-- Left: Compose + Search + Feed list -->
                     <Grid Grid.Column="0">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
@@ -908,7 +909,52 @@
                             </Border>
                         </StackPanel>
 
-                        <ListBox Grid.Row="1" ItemsSource="{Binding Feed.Posts}"
+                        <!-- Search and Tag Filter -->
+                        <StackPanel Grid.Row="1" Margin="0,0,0,6">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Search"
+                                        Command="{Binding Feed.SearchCommand}"
+                                        FontSize="11" Padding="8,4" Margin="4,0,0,0"
+                                        Background="#3498DB" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                                <Button DockPanel.Dock="Right" Content="Clear"
+                                        Command="{Binding Feed.ClearFiltersCommand}"
+                                        FontSize="11" Padding="6,4" Margin="4,0,0,0"
+                                        Cursor="Hand"
+                                        Visibility="{Binding Feed.IsFiltered, Converter={StaticResource BoolToVis}}"/>
+                                <TextBox Text="{Binding Feed.SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="12" Padding="6,4"
+                                         BorderBrush="#BDC3C7" BorderThickness="1"
+                                         ToolTip="Search posts by title or summary"/>
+                            </DockPanel>
+                            <!-- Tag chips -->
+                            <ItemsControl ItemsSource="{Binding Feed.AvailableTags}" Margin="0,4,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="6,2" Margin="0,0,4,4" CornerRadius="10"
+                                                Cursor="Hand" MouseLeftButtonUp="TagChip_Click">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#ECF0F1"/>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#D5DBDB"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding}" FontSize="10" Foreground="#2C3E50"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <ListBox Grid.Row="2" ItemsSource="{Binding Feed.Posts}"
                                  SelectedItem="{Binding Feed.SelectedPost}"
                                  ItemTemplate="{StaticResource ActivityCardTemplate}"
                                  BorderThickness="0" Background="Transparent"

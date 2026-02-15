@@ -34,6 +34,17 @@ public class VoteResponse
     public int NewScore { get; set; }
 }
 
+public class TagInfo
+{
+    public string Tag { get; set; } = string.Empty;
+    public int Count { get; set; }
+}
+
+public class TagsResponse
+{
+    public List<TagInfo>? Tags { get; set; }
+}
+
 public class FeedResponse
 {
     public List<GatherPost>? Posts { get; set; }

@@ -342,6 +342,10 @@ public partial class MainViewModel : ObservableObject
                 AppLogger.LogError("VM: Failed to pre-load feed", ex);
             }
 
+            // Load available tags for feed filtering
+            try { await Feed.LoadTagsAsync(ct); }
+            catch (Exception ex) { AppLogger.LogError("VM: Failed to load tags", ex); }
+
             // Load all channels for the Channels tab
             AppLogger.Log("VM", "Loading all channels...");
             await Channels.LoadAllChannelsAsync(ct);
@@ -790,7 +794,9 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var sort = Feed.SortByScore ? "score" : "newest";
-            var feed = await _api.GetFeedPostsAsync(null, CancellationToken.None, sort);
+            var search = string.IsNullOrWhiteSpace(Feed.SearchQuery) ? null : Feed.SearchQuery.Trim();
+            var tag = string.IsNullOrEmpty(Feed.SelectedTag) ? null : Feed.SelectedTag;
+            var feed = await _api.GetFeedPostsAsync(null, CancellationToken.None, sort, search, tag);
             if (feed?.Posts is null) return;
 
             Application.Current.Dispatcher.Invoke(() =>

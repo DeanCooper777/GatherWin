@@ -16,8 +16,13 @@ public partial class FeedViewModel : ObservableObject
     [ObservableProperty] private int _newCount;
     [ObservableProperty] private ActivityItem? _selectedPost;
     [ObservableProperty] private bool _sortByScore;
+    [ObservableProperty] private string _searchQuery = string.Empty;
+    [ObservableProperty] private string? _selectedTag;
+    [ObservableProperty] private bool _isFiltered;
 
-    /// <summary>Callback to refresh feed with new sort order (wired by MainViewModel).</summary>
+    public ObservableCollection<string> AvailableTags { get; } = new();
+
+    /// <summary>Callback to refresh feed with new sort/search/filter (wired by MainViewModel).</summary>
     public Action? SortChanged { get; set; }
 
     public string SortLabel => SortByScore ? "Top" : "New";
@@ -26,6 +31,41 @@ public partial class FeedViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(SortLabel));
         SortChanged?.Invoke();
+    }
+
+    [RelayCommand]
+    private void Search()
+    {
+        IsFiltered = !string.IsNullOrWhiteSpace(SearchQuery) || !string.IsNullOrEmpty(SelectedTag);
+        SortChanged?.Invoke();
+    }
+
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        SearchQuery = string.Empty;
+        SelectedTag = null;
+        IsFiltered = false;
+        SortChanged?.Invoke();
+    }
+
+    public void SelectTag(string tag)
+    {
+        SelectedTag = tag;
+        IsFiltered = true;
+        SortChanged?.Invoke();
+    }
+
+    public async Task LoadTagsAsync(CancellationToken ct)
+    {
+        var tags = await _api.GetTagsAsync(ct);
+        if (tags?.Tags is null) return;
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            AvailableTags.Clear();
+            foreach (var t in tags.Tags.Take(30))
+                AvailableTags.Add(t.Tag);
+        });
     }
 
     // ── Post Creation State ──────────────────────────────────────

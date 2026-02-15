@@ -202,17 +202,31 @@ public class GatherApiClient
         return (false, ParseApiError(error, (int)response.StatusCode));
     }
 
-    public async Task<FeedResponse?> GetFeedPostsAsync(DateTimeOffset? since, CancellationToken ct, string sort = "newest")
+    public async Task<FeedResponse?> GetFeedPostsAsync(DateTimeOffset? since, CancellationToken ct,
+        string sort = "newest", string? searchQuery = null, string? tag = null)
     {
         var url = $"/api/posts?limit=50&sort={sort}";
         if (since.HasValue)
             url += $"&since={since.Value.UtcDateTime:O}";
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+            url += $"&q={Uri.EscapeDataString(searchQuery)}";
+        if (!string.IsNullOrWhiteSpace(tag))
+            url += $"&tag={Uri.EscapeDataString(tag)}";
         if (ShowFullPosts)
             url += "&expand=body";
         var response = await AuthenticatedGetAsync(url, ct);
         if (response is null || !response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
         return JsonSerializer.Deserialize<FeedResponse>(body, _jsonOpts);
+    }
+
+    /// <summary>Get active tags from the last 30 days.</summary>
+    public async Task<TagsResponse?> GetTagsAsync(CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync("/api/tags", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<TagsResponse>(body, _jsonOpts);
     }
 
     public async Task<ChannelListResponse?> GetChannelsAsync(CancellationToken ct)

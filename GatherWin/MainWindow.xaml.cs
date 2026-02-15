@@ -431,6 +431,12 @@ public partial class MainWindow : Window
 
     // ── Edit Messages (Feature 6) ───────────────────────────────────
 
+    private void TagChip_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is string tag)
+            _viewModel.Feed.SelectTag(tag);
+    }
+
     private void Upvote_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.DataContext is ActivityItem item)
