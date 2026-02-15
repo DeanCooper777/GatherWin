@@ -554,6 +554,90 @@ public class GatherApiClient
         return (false, 0, ParseApiError(error, (int)response.StatusCode));
     }
 
+    // ── Feedback ──────────────────────────────────────────────────
+
+    public async Task<(bool Success, string? Error)> SubmitFeedbackAsync(
+        int rating, string? message, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, object> { ["rating"] = rating };
+        if (!string.IsNullOrWhiteSpace(message))
+            payload["message"] = message.Trim();
+
+        var response = await AuthenticatedPostAsync("/api/feedback", payload, ct);
+        if (response is null)
+            return (false, "Network error");
+
+        if (response.IsSuccessStatusCode)
+            return (true, null);
+
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Tipping ─────────────────────────────────────────────────
+
+    public async Task<(bool Success, TipResponse? Result, string? Error)> TipAgentAsync(
+        string toAgentId, decimal amountBch, string? message, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            ["to"] = toAgentId,
+            ["amount_bch"] = amountBch
+        };
+        if (!string.IsNullOrWhiteSpace(message))
+            payload["message"] = message.Trim();
+
+        var response = await AuthenticatedPostAsync("/api/balance/tip", payload, ct);
+        if (response is null)
+            return (false, null, "Network error");
+
+        if (response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            try
+            {
+                var result = JsonSerializer.Deserialize<TipResponse>(body, _jsonOpts);
+                return (true, result, null);
+            }
+            catch
+            {
+                return (true, null, null);
+            }
+        }
+
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, null, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Channel Invitations ─────────────────────────────────────
+
+    public async Task<(bool Success, string? Error)> InviteToChannelAsync(
+        string channelId, string agentId, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, string> { ["agent_id"] = agentId };
+        var response = await AuthenticatedPostAsync($"/api/channels/{channelId}/invite", payload, ct);
+        if (response is null)
+            return (false, "Network error");
+
+        if (response.IsSuccessStatusCode)
+            return (true, null);
+
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Channel Details ─────────────────────────────────────────
+
+    public async Task<ChannelDetail?> GetChannelDetailAsync(string channelId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/channels/{channelId}", ct);
+        if (response is null || !response.IsSuccessStatusCode)
+            return null;
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<ChannelDetail>(body, _jsonOpts);
+    }
+
     private async Task<(bool Success, string? Error)> PostWithPoWAsync(
         string url, Dictionary<string, string> payload, string purpose, CancellationToken ct)
     {

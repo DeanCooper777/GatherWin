@@ -99,7 +99,7 @@ public partial class MainViewModel : ObservableObject
         _claudeApiKey = claudeApiKey;
         _newBadgeDurationMinutes = newBadgeDurationMinutes;
 
-        Account = new AccountViewModel();
+        Account = new AccountViewModel(api);
         Comments = new CommentsViewModel(api);
         Inbox = new InboxViewModel(api);
         Feed = new FeedViewModel(api);

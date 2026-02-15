@@ -613,4 +613,122 @@ public partial class ChannelsViewModel : ObservableObject
             IsCreating = false;
         }
     }
+
+    // ── Channel Invite (Task #10) ────────────────────────────────
+
+    [ObservableProperty] private bool _isInviting;
+    [ObservableProperty] private string _inviteAgentName = string.Empty;
+    [ObservableProperty] private string? _inviteError;
+    [ObservableProperty] private string? _inviteSuccess;
+    [ObservableProperty] private bool _showInviteForm;
+
+    [RelayCommand]
+    private void ShowInvite()
+    {
+        ShowInviteForm = true;
+        InviteError = null;
+        InviteSuccess = null;
+        InviteAgentName = string.Empty;
+    }
+
+    [RelayCommand]
+    private void CancelInvite()
+    {
+        ShowInviteForm = false;
+        InviteAgentName = string.Empty;
+        InviteError = null;
+        InviteSuccess = null;
+    }
+
+    [RelayCommand]
+    private async Task InviteAgentAsync(CancellationToken ct)
+    {
+        if (SelectedChannel is null || string.IsNullOrWhiteSpace(InviteAgentName))
+        {
+            InviteError = "Enter an agent name";
+            return;
+        }
+
+        IsInviting = true;
+        InviteError = null;
+        InviteSuccess = null;
+
+        try
+        {
+            // Resolve agent name to ID
+            var agent = await _api.GetAgentByNameAsync(InviteAgentName.Trim(), ct);
+            if (agent is null)
+            {
+                InviteError = $"Agent \"{InviteAgentName.Trim()}\" not found";
+                return;
+            }
+
+            var (success, error) = await _api.InviteToChannelAsync(SelectedChannel.Id, agent.Id!, ct);
+            if (success)
+            {
+                InviteSuccess = $"Invited {InviteAgentName.Trim()}!";
+                InviteAgentName = string.Empty;
+                AppLogger.Log("Channels", $"Invited {agent.Name} to #{SelectedChannel.Name}");
+            }
+            else
+            {
+                InviteError = error ?? "Failed to invite agent";
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Channels: invite agent failed", ex);
+            InviteError = ex.Message;
+        }
+        finally
+        {
+            IsInviting = false;
+        }
+    }
+
+    // ── Channel Details / Member List (Task #11) ─────────────────
+
+    [ObservableProperty] private bool _isLoadingDetail;
+    [ObservableProperty] private bool _showChannelDetail;
+    public ObservableCollection<ChannelMember> ChannelMembers { get; } = new();
+
+    [RelayCommand]
+    private async Task LoadChannelDetailAsync(CancellationToken ct)
+    {
+        if (SelectedChannel is null) return;
+
+        ShowChannelDetail = !ShowChannelDetail;
+        if (!ShowChannelDetail)
+        {
+            Application.Current.Dispatcher.Invoke(() => ChannelMembers.Clear());
+            return;
+        }
+
+        IsLoadingDetail = true;
+
+        try
+        {
+            var detail = await _api.GetChannelDetailAsync(SelectedChannel.Id, ct);
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                ChannelMembers.Clear();
+                if (detail?.Members is not null)
+                {
+                    foreach (var m in detail.Members)
+                        ChannelMembers.Add(m);
+                }
+            });
+
+            if (detail?.Members is not null)
+                AppLogger.Log("Channels", $"Loaded {detail.Members.Count} members for #{SelectedChannel.Name}");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Channels: load detail failed", ex);
+        }
+        finally
+        {
+            IsLoadingDetail = false;
+        }
+    }
 }

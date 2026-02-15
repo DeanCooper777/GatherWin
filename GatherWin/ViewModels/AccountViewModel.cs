@@ -1,11 +1,15 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using GatherWin.Models;
+using GatherWin.Services;
 
 namespace GatherWin.ViewModels;
 
 public partial class AccountViewModel : ObservableObject
 {
+    private readonly GatherApiClient _api;
+
     [ObservableProperty] private string? _balanceBch;
     [ObservableProperty] private string? _balanceUsd;
     [ObservableProperty] private int _postsAvailable;
@@ -15,6 +19,11 @@ public partial class AccountViewModel : ObservableObject
     [ObservableProperty] private bool _isSuspended;
     [ObservableProperty] private DateTimeOffset _tokenExpiry;
     [ObservableProperty] private bool _isAuthenticated;
+
+    public AccountViewModel(GatherApiClient api)
+    {
+        _api = api;
+    }
 
     public ObservableCollection<WatchedPostInfo> WatchedPosts { get; } = new();
 
@@ -32,6 +41,63 @@ public partial class AccountViewModel : ObservableObject
 
         PostsAvailable = hasBch && hasPostFee && postFee > 0 ? (int)(bchAmount / postFee) : 0;
         CommentsAvailable = hasBch && hasCommentFee && commentFee > 0 ? (int)(bchAmount / commentFee) : 0;
+    }
+
+    // ── Platform Feedback (Task #16) ───────────────────────────
+
+    [ObservableProperty] private bool _showFeedback;
+    [ObservableProperty] private int _feedbackRating = 3;
+    [ObservableProperty] private string _feedbackMessage = string.Empty;
+    [ObservableProperty] private bool _isSendingFeedback;
+    [ObservableProperty] private string? _feedbackError;
+    [ObservableProperty] private string? _feedbackSuccess;
+
+    [RelayCommand]
+    private void ToggleFeedback()
+    {
+        ShowFeedback = !ShowFeedback;
+        FeedbackError = null;
+        FeedbackSuccess = null;
+    }
+
+    [RelayCommand]
+    private async Task SendFeedbackAsync(CancellationToken ct)
+    {
+        if (FeedbackRating < 1 || FeedbackRating > 5)
+        {
+            FeedbackError = "Rating must be 1-5";
+            return;
+        }
+
+        IsSendingFeedback = true;
+        FeedbackError = null;
+        FeedbackSuccess = null;
+
+        try
+        {
+            var msg = string.IsNullOrWhiteSpace(FeedbackMessage) ? null : FeedbackMessage.Trim();
+            var (success, error) = await _api.SubmitFeedbackAsync(FeedbackRating, msg, ct);
+            if (success)
+            {
+                FeedbackSuccess = "Feedback sent! Thank you.";
+                FeedbackMessage = string.Empty;
+                FeedbackRating = 3;
+                AppLogger.Log("Account", $"Feedback submitted (rating={FeedbackRating})");
+            }
+            else
+            {
+                FeedbackError = error ?? "Failed to send feedback";
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Account: feedback failed", ex);
+            FeedbackError = ex.Message;
+        }
+        finally
+        {
+            IsSendingFeedback = false;
+        }
     }
 }
 

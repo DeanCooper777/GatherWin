@@ -630,4 +630,33 @@ public partial class MainWindow : Window
             AppLogger.LogError("UI: FlashWindow failed", ex);
         }
     }
+
+    private void ApiDocs_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://gather.is/docs",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("UI: open API docs failed", ex);
+        }
+    }
+
+    private void FeedbackRating_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button btn && btn.Tag is string tag && int.TryParse(tag, out var rating))
+        {
+            _viewModel.Account.FeedbackRating = rating;
+        }
+    }
+
+    private void ChannelInvite_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.Channels.ShowInviteCommand.Execute(null);
+    }
 }

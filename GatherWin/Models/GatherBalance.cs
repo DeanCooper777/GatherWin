@@ -10,3 +10,11 @@ public class BalanceResponse
     public int FreePostsRemainingThisWeek { get; set; }
     public bool Suspended { get; set; }
 }
+
+public class TipResponse
+{
+    public decimal FromBalanceBch { get; set; }
+    public decimal ToBalanceBch { get; set; }
+    public decimal AmountBch { get; set; }
+    public string? Message { get; set; }
+}

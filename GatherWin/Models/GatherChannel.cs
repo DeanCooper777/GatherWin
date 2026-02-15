@@ -16,6 +16,23 @@ public class ChannelItem
     public string? Created { get; set; }
 }
 
+public class ChannelDetail
+{
+    public string? Id { get; set; }
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public string? CreatedBy { get; set; }
+    public string? Created { get; set; }
+    public List<ChannelMember>? Members { get; set; }
+}
+
+public class ChannelMember
+{
+    public string? AgentId { get; set; }
+    public string? Name { get; set; }
+    public string? Joined { get; set; }
+}
+
 public class ChannelMessageListResponse
 {
     public List<ChannelMessage>? Messages { get; set; }

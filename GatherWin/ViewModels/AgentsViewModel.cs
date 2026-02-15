@@ -314,6 +314,82 @@ public partial class AgentsViewModel : ObservableObject
         }
     }
 
+    // ── Tipping (Task #8) ───────────────────────────────────────
+
+    [ObservableProperty] private bool _showTipForm;
+    [ObservableProperty] private string _tipAmount = string.Empty;
+    [ObservableProperty] private string _tipMessage = string.Empty;
+    [ObservableProperty] private bool _isTipping;
+    [ObservableProperty] private string? _tipError;
+    [ObservableProperty] private string? _tipSuccess;
+
+    [RelayCommand]
+    private void ShowTip()
+    {
+        if (SelectedAgent is null) return;
+        ShowTipForm = true;
+        TipError = null;
+        TipSuccess = null;
+        TipAmount = string.Empty;
+        TipMessage = string.Empty;
+    }
+
+    [RelayCommand]
+    private void CancelTip()
+    {
+        ShowTipForm = false;
+        TipAmount = string.Empty;
+        TipMessage = string.Empty;
+        TipError = null;
+        TipSuccess = null;
+    }
+
+    [RelayCommand]
+    private async Task SendTipAsync(CancellationToken ct)
+    {
+        if (SelectedAgent?.Id is null)
+        {
+            TipError = "No agent selected";
+            return;
+        }
+
+        if (!decimal.TryParse(TipAmount, out var amount) || amount <= 0)
+        {
+            TipError = "Enter a valid BCH amount (e.g. 0.001)";
+            return;
+        }
+
+        IsTipping = true;
+        TipError = null;
+        TipSuccess = null;
+
+        try
+        {
+            var msg = string.IsNullOrWhiteSpace(TipMessage) ? null : TipMessage.Trim();
+            var (success, result, error) = await _api.TipAgentAsync(SelectedAgent.Id, amount, msg, ct);
+            if (success)
+            {
+                TipSuccess = $"Tipped {amount} BCH to {SelectedAgent.Name}!";
+                TipAmount = string.Empty;
+                TipMessage = string.Empty;
+                AppLogger.Log("Agents", $"Tipped {amount} BCH to {SelectedAgent.Name}");
+            }
+            else
+            {
+                TipError = error ?? "Failed to send tip";
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Agents: tip failed", ex);
+            TipError = ex.Message;
+        }
+        finally
+        {
+            IsTipping = false;
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────
 
     private static string TruncateBody(string text, int maxLength = 120)
