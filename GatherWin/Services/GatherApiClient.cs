@@ -126,9 +126,9 @@ public class GatherApiClient
         return JsonSerializer.Deserialize<InboxResponse>(body, _jsonOpts);
     }
 
-    public async Task<FeedResponse?> GetFeedPostsAsync(DateTimeOffset? since, CancellationToken ct)
+    public async Task<FeedResponse?> GetFeedPostsAsync(DateTimeOffset? since, CancellationToken ct, string sort = "newest")
     {
-        var url = "/api/posts?limit=50";
+        var url = $"/api/posts?limit=50&sort={sort}";
         if (since.HasValue)
             url += $"&since={since.Value.UtcDateTime:O}";
         if (ShowFullPosts)

@@ -336,6 +336,7 @@ public class PollingService
                             Title = p.Title ?? p.Summary ?? "(no title)",
                             Body = p.Body ?? p.Summary ?? "",
                             Timestamp = ParseTimestamp(p.Created),
+                            Score = p.Score,
                             IsInitialLoad = true
                         });
                     }
@@ -358,7 +359,8 @@ public class PollingService
                 Author = post.Author ?? "unknown",
                 Title = post.Title ?? post.Summary ?? "(no title)",
                 Body = post.Body ?? post.Summary ?? "",
-                Timestamp = ParseTimestamp(post.Created)
+                Timestamp = ParseTimestamp(post.Created),
+                Score = post.Score
             });
         }
 
@@ -530,6 +532,7 @@ public class FeedPostEventArgs : EventArgs
     public required string Title { get; init; }
     public required string Body { get; init; }
     public required DateTimeOffset Timestamp { get; init; }
+    public int Score { get; init; }
     public bool IsInitialLoad { get; init; }
 }
 

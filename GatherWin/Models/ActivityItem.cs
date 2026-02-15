@@ -22,6 +22,7 @@ public partial class ActivityItem : ObservableObject
     [ObservableProperty] private string? _commentId;
     [ObservableProperty] private string? _channelId;
     [ObservableProperty] private string? _channelName;
+    [ObservableProperty] private int _score;
     [ObservableProperty] private bool _isNew = true;
     [ObservableProperty] private bool _isExpanded;
 

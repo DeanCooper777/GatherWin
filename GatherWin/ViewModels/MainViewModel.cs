@@ -113,6 +113,7 @@ public partial class MainViewModel : ObservableObject
 
         // Wire subscribe/unsubscribe callbacks
         Feed.SubscribeRequested = postId => _ = SubscribeToPostAsync(postId);
+        Feed.SortChanged = () => _ = RefreshFeedSortAsync();
         Comments.UnsubscribeRequested = postId => UnsubscribeFromPost(postId);
 
         // Apply saved channel settings
@@ -310,7 +311,8 @@ public partial class MainViewModel : ObservableObject
             AppLogger.Log("VM", "Pre-loading feed posts...");
             try
             {
-                var feed = await _api.GetFeedPostsAsync(DateTimeOffset.UtcNow.AddDays(-7), ct);
+                var sort = Feed.SortByScore ? "score" : "newest";
+                var feed = await _api.GetFeedPostsAsync(DateTimeOffset.UtcNow.AddDays(-7), ct, sort);
                 if (feed?.Posts is not null)
                 {
                     foreach (var p in feed.Posts)
@@ -318,7 +320,7 @@ public partial class MainViewModel : ObservableObject
                         Feed.AddPost(p.Id ?? "", p.Author ?? "unknown",
                             p.Title ?? p.Summary ?? "(untitled)",
                             p.Body ?? p.Summary ?? "",
-                            ParseTimestamp(p.Created), isNew: false);
+                            ParseTimestamp(p.Created), isNew: false, score: p.Score);
                         AddToAllActivity(new ActivityItem
                         {
                             Type = ActivityType.FeedPost,
@@ -327,6 +329,7 @@ public partial class MainViewModel : ObservableObject
                             Author = p.Author ?? "unknown",
                             Body = p.Body ?? p.Summary ?? "",
                             Timestamp = ParseTimestamp(p.Created),
+                            Score = p.Score,
                             IsNew = false
                         });
                     }
@@ -529,7 +532,7 @@ public partial class MainViewModel : ObservableObject
                 _cycleFeedCount++;
                 PollingLog.WriteEntry($"Feed post by {e.Author}: \"{e.Title}\"", Models.LogEntryType.FeedPost);
             }
-            Feed.AddPost(e.PostId, e.Author, e.Title, e.Body, e.Timestamp, isNew);
+            Feed.AddPost(e.PostId, e.Author, e.Title, e.Body, e.Timestamp, isNew, e.Score);
             AddToAllActivity(new ActivityItem
             {
                 Type = ActivityType.FeedPost,
@@ -538,6 +541,7 @@ public partial class MainViewModel : ObservableObject
                 Author = e.Author,
                 Body = e.Body,
                 Timestamp = e.Timestamp,
+                Score = e.Score,
                 IsNew = isNew,
                 MarkedNewAt = isNew ? now : default
             });
@@ -778,6 +782,32 @@ public partial class MainViewModel : ObservableObject
     }
 
     // ── Subscribe / Unsubscribe (Features 4 & 5) ────────────────
+
+    private async Task RefreshFeedSortAsync()
+    {
+        try
+        {
+            var sort = Feed.SortByScore ? "score" : "newest";
+            var feed = await _api.GetFeedPostsAsync(null, CancellationToken.None, sort);
+            if (feed?.Posts is null) return;
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                Feed.Posts.Clear();
+                foreach (var p in feed.Posts)
+                {
+                    Feed.AddPost(p.Id ?? "", p.Author ?? "unknown",
+                        p.Title ?? p.Summary ?? "(untitled)",
+                        p.Body ?? p.Summary ?? "",
+                        ParseTimestamp(p.Created), isNew: false, score: p.Score);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("VM: Feed sort refresh failed", ex);
+        }
+    }
 
     public async Task SubscribeToPostAsync(string postId)
     {

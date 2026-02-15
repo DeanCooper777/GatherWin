@@ -15,6 +15,18 @@ public partial class FeedViewModel : ObservableObject
 
     [ObservableProperty] private int _newCount;
     [ObservableProperty] private ActivityItem? _selectedPost;
+    [ObservableProperty] private bool _sortByScore;
+
+    /// <summary>Callback to refresh feed with new sort order (wired by MainViewModel).</summary>
+    public Action? SortChanged { get; set; }
+
+    public string SortLabel => SortByScore ? "Top" : "New";
+
+    partial void OnSortByScoreChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SortLabel));
+        SortChanged?.Invoke();
+    }
 
     // ── Post Creation State ──────────────────────────────────────
     [ObservableProperty] private bool _isComposing;
@@ -48,7 +60,10 @@ public partial class FeedViewModel : ObservableObject
         _api = api;
     }
 
-    public void AddPost(string postId, string author, string title, string body, DateTimeOffset timestamp, bool isNew = true)
+    [RelayCommand]
+    private void ToggleSort() => SortByScore = !SortByScore;
+
+    public void AddPost(string postId, string author, string title, string body, DateTimeOffset timestamp, bool isNew = true, int score = 0)
     {
         var item = new ActivityItem
         {
@@ -58,6 +73,7 @@ public partial class FeedViewModel : ObservableObject
             Author = author,
             Body = body,
             Timestamp = timestamp,
+            Score = score,
             IsNew = isNew,
             MarkedNewAt = isNew ? DateTimeOffset.Now : default
         };
@@ -366,11 +382,14 @@ public partial class FeedViewModel : ObservableObject
             SubscribeRequested?.Invoke(DiscussionPostId);
     }
 
-    private static void InsertSorted(ObservableCollection<ActivityItem> list, ActivityItem item)
+    private void InsertSorted(ObservableCollection<ActivityItem> list, ActivityItem item)
     {
         for (int i = 0; i < list.Count; i++)
         {
-            if (item.Timestamp >= list[i].Timestamp)
+            bool before = SortByScore
+                ? item.Score > list[i].Score
+                : item.Timestamp >= list[i].Timestamp;
+            if (before)
             {
                 list.Insert(i, item);
                 return;

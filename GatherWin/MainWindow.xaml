@@ -787,23 +787,35 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Compose area -->
+                        <!-- Toolbar: Compose + Sort -->
                         <StackPanel Grid.Row="0" Margin="0,0,0,8">
-                            <Button Content="＋ New Post"
-                                    Command="{Binding Feed.ShowComposeCommand}"
-                                    Background="#2980B9" Foreground="White" Padding="12,6"
-                                    FontSize="12" FontWeight="SemiBold" BorderThickness="0"
-                                    Cursor="Hand" HorizontalAlignment="Left">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Feed.IsComposing}" Value="True">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
+                            <DockPanel Margin="0,0,0,4">
+                                <Button Content="＋ New Post"
+                                        Command="{Binding Feed.ShowComposeCommand}"
+                                        Background="#2980B9" Foreground="White" Padding="12,6"
+                                        FontSize="12" FontWeight="SemiBold" BorderThickness="0"
+                                        Cursor="Hand" DockPanel.Dock="Left">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Feed.IsComposing}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="Sort:" FontSize="11" Foreground="#666" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <Button Command="{Binding Feed.ToggleSortCommand}"
+                                            Content="{Binding Feed.SortLabel}"
+                                            FontSize="11" FontWeight="SemiBold" Padding="8,3"
+                                            Background="#ECF0F1" Foreground="#2C3E50"
+                                            BorderBrush="#BDC3C7" BorderThickness="1"
+                                            Cursor="Hand" ToolTip="Toggle between Newest and Top Score"/>
+                                </StackPanel>
+                            </DockPanel>
 
                             <!-- Compose form -->
                             <Border Background="#E8F4FD" Padding="10" CornerRadius="4"
