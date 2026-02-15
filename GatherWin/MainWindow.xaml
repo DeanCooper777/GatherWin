@@ -227,6 +227,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- Header row -->
@@ -236,18 +237,34 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="INBOX" FontWeight="SemiBold" FontSize="12" Margin="0,0,6,0"/>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <TextBlock Text="INBOX" FontWeight="SemiBold" FontSize="12" Margin="0,0,6,0"/>
+                            <Border Background="#E74C3C" CornerRadius="3" Padding="4,1" Margin="0,0,4,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IsNew, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="NEW" FontSize="9" FontWeight="Bold" Foreground="White"/>
+                            </Border>
+                        </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#555"
                                        TextTrimming="CharacterEllipsis" MaxWidth="400"/>
-                            <TextBlock Text=" →" FontSize="12" Foreground="#3498DB" FontWeight="Bold"
+                            <TextBlock Text=" &#x2192;" FontSize="12" Foreground="#3498DB" FontWeight="Bold"
                                        VerticalAlignment="Center" Margin="4,0,0,0"
                                        ToolTip="Click to view referenced post"
                                        Visibility="{Binding PostId, Converter={StaticResource NotNullToVis}}"/>
                         </StackPanel>
-                        <TextBlock Grid.Column="2"
-                                   Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
-                                   FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="Read" FontSize="9" Padding="4,1" Margin="0,0,4,0"
+                                    Background="Transparent" Foreground="#27AE60"
+                                    BorderBrush="#27AE60" BorderThickness="1"
+                                    Cursor="Hand" Click="InboxMarkRead_Click" ToolTip="Mark as read"/>
+                            <Button Content="&#x2715;" FontSize="9" Padding="4,1" Margin="0,0,6,0"
+                                    Background="Transparent" Foreground="#E74C3C"
+                                    BorderBrush="#E74C3C" BorderThickness="1"
+                                    Cursor="Hand" Click="InboxDelete_Click" ToolTip="Delete message"/>
+                            <TextBlock Text="{Binding Timestamp, Converter={StaticResource TimeAgo}}"
+                                       FontSize="10" Foreground="#999" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </Grid>
 
                     <!-- Body (markdown rendered) -->

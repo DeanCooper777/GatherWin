@@ -107,6 +107,20 @@ public partial class MainWindow : Window
         }
     }
 
+    private void InboxMarkRead_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is ActivityItem item)
+            _ = _viewModel.Inbox.MarkReadAsync(item);
+        e.Handled = true;
+    }
+
+    private void InboxDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is ActivityItem item)
+            _ = _viewModel.Inbox.DeleteMessageAsync(item);
+        e.Handled = true;
+    }
+
     private void WhatsNewCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.DataContext is WhatsNewEntry entry)

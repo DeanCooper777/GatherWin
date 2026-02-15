@@ -1,12 +1,16 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using GatherWin.Models;
+using GatherWin.Services;
 
 namespace GatherWin.ViewModels;
 
 public partial class InboxViewModel : ObservableObject
 {
+    private readonly GatherApiClient? _api;
+
     public ObservableCollection<ActivityItem> Messages { get; } = new();
 
     [ObservableProperty] private int _unreadCount;
@@ -14,13 +18,16 @@ public partial class InboxViewModel : ObservableObject
     [ObservableProperty] private int _newCount;
     [ObservableProperty] private ActivityItem? _selectedMessage;
 
-    public void AddMessage(string subject, string body, DateTimeOffset timestamp, bool isNew = true,
+    public InboxViewModel() { }
+    public InboxViewModel(GatherApiClient api) { _api = api; }
+
+    public void AddMessage(string messageId, string subject, string body, DateTimeOffset timestamp, bool isNew = true,
         string? postId = null, string? commentId = null, string? channelId = null)
     {
         var item = new ActivityItem
         {
             Type = ActivityType.Inbox,
-            Id = Guid.NewGuid().ToString(),
+            Id = messageId,
             Title = subject,
             Author = string.Empty,
             Body = body,
@@ -37,6 +44,38 @@ public partial class InboxViewModel : ObservableObject
             InsertSorted(Messages, item);
             if (isNew) NewCount++;
         });
+    }
+
+    public async Task MarkReadAsync(ActivityItem message)
+    {
+        if (_api is null || string.IsNullOrEmpty(message.Id)) return;
+        var (success, error) = await _api.MarkInboxReadAsync(message.Id, CancellationToken.None);
+        if (success)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                message.IsNew = false;
+                if (UnreadCount > 0) UnreadCount--;
+            });
+        }
+        else
+        {
+            AppLogger.LogError($"Mark read failed: {error}");
+        }
+    }
+
+    public async Task DeleteMessageAsync(ActivityItem message)
+    {
+        if (_api is null || string.IsNullOrEmpty(message.Id)) return;
+        var (success, error) = await _api.DeleteInboxMessageAsync(message.Id, CancellationToken.None);
+        if (success)
+        {
+            Application.Current.Dispatcher.Invoke(() => Messages.Remove(message));
+        }
+        else
+        {
+            AppLogger.LogError($"Delete inbox message failed: {error}");
+        }
     }
 
     public void ResetNewCount() => NewCount = 0;

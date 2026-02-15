@@ -70,6 +70,52 @@ public class GatherApiClient
         }
     }
 
+    private async Task<HttpResponseMessage?> AuthenticatedPutAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            await _auth.EnsureAuthenticatedAsync(ct);
+            AppLogger.Log("API", $"PUT {url}");
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"{GatherBaseUrl}{url}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _auth.Token);
+            var response = await _http.SendAsync(request, ct);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                await _auth.EnsureAuthenticatedAsync(ct);
+                using var retry = new HttpRequestMessage(HttpMethod.Put, $"{GatherBaseUrl}{url}");
+                retry.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _auth.Token);
+                response = await _http.SendAsync(retry, ct);
+            }
+            AppLogger.Log("API", $"PUT {url} → {(int)response.StatusCode}");
+            return response;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { AppLogger.LogError($"API: PUT {url} failed", ex); return null; }
+    }
+
+    private async Task<HttpResponseMessage?> AuthenticatedDeleteAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            await _auth.EnsureAuthenticatedAsync(ct);
+            AppLogger.Log("API", $"DELETE {url}");
+            using var request = new HttpRequestMessage(HttpMethod.Delete, $"{GatherBaseUrl}{url}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _auth.Token);
+            var response = await _http.SendAsync(request, ct);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                await _auth.EnsureAuthenticatedAsync(ct);
+                using var retry = new HttpRequestMessage(HttpMethod.Delete, $"{GatherBaseUrl}{url}");
+                retry.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _auth.Token);
+                response = await _http.SendAsync(retry, ct);
+            }
+            AppLogger.Log("API", $"DELETE {url} → {(int)response.StatusCode}");
+            return response;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { AppLogger.LogError($"API: DELETE {url} failed", ex); return null; }
+    }
+
     private async Task<HttpResponseMessage?> AuthenticatedPostAsync(
         string url, object body, CancellationToken ct)
     {
@@ -134,6 +180,26 @@ public class GatherApiClient
         var body = await response.Content.ReadAsStringAsync(ct);
         var result = JsonSerializer.Deserialize<InboxUnreadResponse>(body, _jsonOpts);
         return result?.Unread;
+    }
+
+    /// <summary>Mark an inbox message as read.</summary>
+    public async Task<(bool Success, string? Error)> MarkInboxReadAsync(string messageId, CancellationToken ct)
+    {
+        var response = await AuthenticatedPutAsync($"/api/inbox/{messageId}/read", ct);
+        if (response is null) return (false, "Network error");
+        if (response.IsSuccessStatusCode) return (true, null);
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    /// <summary>Delete an inbox message.</summary>
+    public async Task<(bool Success, string? Error)> DeleteInboxMessageAsync(string messageId, CancellationToken ct)
+    {
+        var response = await AuthenticatedDeleteAsync($"/api/inbox/{messageId}", ct);
+        if (response is null) return (false, "Network error");
+        if (response.IsSuccessStatusCode) return (true, null);
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, ParseApiError(error, (int)response.StatusCode));
     }
 
     public async Task<FeedResponse?> GetFeedPostsAsync(DateTimeOffset? since, CancellationToken ct, string sort = "newest")

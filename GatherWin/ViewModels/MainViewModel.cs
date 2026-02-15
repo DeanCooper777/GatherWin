@@ -101,7 +101,7 @@ public partial class MainViewModel : ObservableObject
 
         Account = new AccountViewModel();
         Comments = new CommentsViewModel(api);
-        Inbox = new InboxViewModel();
+        Inbox = new InboxViewModel(api);
         Feed = new FeedViewModel(api);
         Channels = new ChannelsViewModel(api);
         WhatsNew = new WhatsNewViewModel(api, keysDirectory);
@@ -505,7 +505,7 @@ public partial class MainViewModel : ObservableObject
                 _cycleInboxCount++;
                 PollingLog.WriteEntry($"Inbox: {e.Subject}", Models.LogEntryType.Inbox);
             }
-            Inbox.AddMessage(e.Subject, e.Body, e.Timestamp, isNew, e.PostId, e.CommentId, e.ChannelId);
+            Inbox.AddMessage(e.MessageId, e.Subject, e.Body, e.Timestamp, isNew, e.PostId, e.CommentId, e.ChannelId);
             AddToAllActivity(new ActivityItem
             {
                 Type = ActivityType.Inbox,
