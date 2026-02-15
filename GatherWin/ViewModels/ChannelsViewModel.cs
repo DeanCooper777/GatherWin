@@ -299,21 +299,34 @@ public partial class ChannelsViewModel : ObservableObject
     {
         Application.Current.Dispatcher.Invoke(() =>
         {
-            // Find or create channel
-            var channel = Channels.FirstOrDefault(c => c.Id == channelId);
+            // Find channel in filtered list, master list, or create new
+            var channel = Channels.FirstOrDefault(c => c.Id == channelId)
+                ?? _allChannels.FirstOrDefault(c => c.Id == channelId);
+            var isSelected = SelectedChannel is not null && SelectedChannel.Id == channelId;
+            var isSameInstance = ReferenceEquals(channel, SelectedChannel);
+
             if (channel is null)
             {
                 channel = new ChannelInfo { Id = channelId, Name = channelName };
+                _allChannels.Add(channel);
                 Channels.Add(channel);
             }
+
+            AppLogger.Log("Channels", $"AddMessage: ch={channelName} found={channel is not null} isSelected={isSelected} sameInstance={isSameInstance} threadedCount={channel.ThreadedMessages.Count} selectedThreaded={SelectedChannel?.ThreadedMessages.Count ?? -1}");
 
             // Skip duplicates — check by ID and also by content (handles optimistic local adds
             // where the local GUID differs from the server-assigned ID)
             if (channel.Messages.Any(m => m.Id == messageId))
+            {
+                AppLogger.Log("Channels", "AddMessage: skipped (duplicate ID)");
                 return;
+            }
             if (channel.Messages.Any(m => m.Author == author && m.Body == body
                     && Math.Abs((m.Timestamp - timestamp).TotalSeconds) < 60))
+            {
+                AppLogger.Log("Channels", "AddMessage: skipped (duplicate content)");
                 return;
+            }
 
             var item = new ActivityItem
             {
