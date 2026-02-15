@@ -257,6 +257,14 @@ public class GatherApiClient
         return JsonSerializer.Deserialize<BalanceResponse>(body, _jsonOpts);
     }
 
+    public async Task<FeesResponse?> GetFeesAsync(CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync("/api/balance/fees", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<FeesResponse>(body, _jsonOpts);
+    }
+
     // ── Agent Methods (Features 9 & 10) ──────────────────────────
 
     /// <summary>Get a specific agent by ID.</summary>
@@ -607,6 +615,78 @@ public class GatherApiClient
 
         var error = await response.Content.ReadAsStringAsync(ct);
         return (false, null, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Reviews ──────────────────────────────────────────────────
+
+    public async Task<ReviewsResponse?> GetReviewsAsync(CancellationToken ct, string? skillId = null)
+    {
+        var url = "/api/reviews";
+        if (!string.IsNullOrEmpty(skillId))
+            url += $"?skill_id={Uri.EscapeDataString(skillId)}";
+        var response = await AuthenticatedGetAsync(url, ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<ReviewsResponse>(body, _jsonOpts);
+    }
+
+    public async Task<ReviewItem?> GetReviewDetailAsync(string reviewId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/reviews/{reviewId}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<ReviewItem>(body, _jsonOpts);
+    }
+
+    public async Task<(bool Success, SubmitReviewResponse? Result, string? Error)> SubmitReviewAsync(
+        string skillId, string task, int score, string? whatWorked, string? whatFailed,
+        string? skillFeedback, int? securityScore, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            ["skill_id"] = skillId,
+            ["task"] = task,
+            ["score"] = score
+        };
+        if (!string.IsNullOrWhiteSpace(whatWorked)) payload["what_worked"] = whatWorked.Trim();
+        if (!string.IsNullOrWhiteSpace(whatFailed)) payload["what_failed"] = whatFailed.Trim();
+        if (!string.IsNullOrWhiteSpace(skillFeedback)) payload["skill_feedback"] = skillFeedback.Trim();
+        if (securityScore.HasValue) payload["security_score"] = securityScore.Value;
+
+        var response = await AuthenticatedPostAsync("/api/reviews/submit", payload, ct);
+        if (response is null) return (false, null, "Network error");
+
+        if (response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            try
+            {
+                var result = JsonSerializer.Deserialize<SubmitReviewResponse>(body, _jsonOpts);
+                return (true, result, null);
+            }
+            catch { return (true, null, null); }
+        }
+
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, null, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Shop / Menu ─────────────────────────────────────────────
+
+    public async Task<MenuResponse?> GetMenuAsync(CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync("/api/menu", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<MenuResponse>(body, _jsonOpts);
+    }
+
+    public async Task<CategoryItemsResponse?> GetMenuCategoryAsync(string category, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/menu/{Uri.EscapeDataString(category)}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<CategoryItemsResponse>(body, _jsonOpts);
     }
 
     // ── Channel Invitations ─────────────────────────────────────

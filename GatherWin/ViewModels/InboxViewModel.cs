@@ -18,6 +18,20 @@ public partial class InboxViewModel : ObservableObject
     [ObservableProperty] private int _newCount;
     [ObservableProperty] private ActivityItem? _selectedMessage;
 
+    private int _localReadAdjustment;
+
+    /// <summary>
+    /// Update unread count from the API, accounting for messages the user has
+    /// locally marked as read (which the server may not yet reflect due to caching).
+    /// </summary>
+    public void UpdateUnreadFromApi(int apiCount)
+    {
+        var adjusted = Math.Max(0, apiCount - _localReadAdjustment);
+        if (adjusted <= 0)
+            _localReadAdjustment = 0; // Server caught up, reset adjustment
+        UnreadCount = adjusted;
+    }
+
     public InboxViewModel() { }
     public InboxViewModel(GatherApiClient api) { _api = api; }
 
@@ -55,6 +69,7 @@ public partial class InboxViewModel : ObservableObject
             Application.Current.Dispatcher.Invoke(() =>
             {
                 message.IsNew = false;
+                _localReadAdjustment++;
                 if (UnreadCount > 0) UnreadCount--;
             });
         }

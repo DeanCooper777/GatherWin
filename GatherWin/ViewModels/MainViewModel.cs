@@ -71,6 +71,7 @@ public partial class MainViewModel : ObservableObject
     public ChannelsViewModel Channels { get; }
     public WhatsNewViewModel WhatsNew { get; }
     public AgentsViewModel Agents { get; }
+    public ShopViewModel Shop { get; }
     public ObservableCollection<ActivityItem> AllActivity { get; } = new();
 
     public string AgentId => _agentId;
@@ -106,6 +107,7 @@ public partial class MainViewModel : ObservableObject
         Channels = new ChannelsViewModel(api);
         WhatsNew = new WhatsNewViewModel(api, keysDirectory);
         Agents = new AgentsViewModel(api);
+        Shop = new ShopViewModel(api);
 
         // Apply saved post display preference
         _api.ShowFullPosts = WhatsNew.Options.ShowFullPosts;
@@ -191,6 +193,11 @@ public partial class MainViewModel : ObservableObject
                 // Auto-check when switching to What's New tab (if connected)
                 if (IsConnected && !WhatsNew.IsChecking)
                     _ = WhatsNew.CheckForNewsAsync(CancellationToken.None);
+                break;
+            case 7:
+                // Auto-load shop when switching to Shop tab
+                if (IsConnected && !Shop.IsLoading && Shop.Categories.Count == 0)
+                    _ = Shop.LoadCategoriesAsync(CancellationToken.None);
                 break;
         }
     }
@@ -303,7 +310,17 @@ public partial class MainViewModel : ObservableObject
                     decimal.TryParse(balance.BalanceUsdApprox, out var usd) && bch > 0)
                 {
                     Agents.BchToUsdRate = usd / bch;
+                    Shop.BchToUsdRate = usd / bch;
                 }
+
+            // Fetch deposit address
+            try
+            {
+                var fees = await _api.GetFeesAsync(ct);
+                if (fees?.DepositAddress is not null)
+                    Account.DepositAddress = fees.DepositAddress;
+            }
+            catch (Exception ex) { AppLogger.LogError("VM: fees fetch failed", ex); }
             }
             else
             {
@@ -443,6 +460,44 @@ public partial class MainViewModel : ObservableObject
         Account.IsAuthenticated = false;
         StatusMessage = "Disconnected";
         AppLogger.Log("VM", "Disconnected");
+    }
+
+    public async Task RestartPollingAsync()
+    {
+        if (_polling is null || _api is null) return;
+
+        AppLogger.Log("VM", "Restarting polling service...");
+        PollingLog.WriteEntry("Restarting polling service...", Models.LogEntryType.None);
+
+        // Stop existing polling
+        UnwirePollingEvents();
+        _polling.Stop();
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+
+        // Create fresh polling service
+        _pollCts = new CancellationTokenSource();
+        _polling = new PollingService(_api, _agentId, _watchedPostIds, _pollIntervalSeconds);
+        _polling.SkipInitialChannelFetch = true;
+        _polling.SkipInitialFeedFetch = true;
+        _polling.SkipInitialInboxFetch = true;
+
+        // Seed with existing IDs
+        foreach (var post in Feed.Posts)
+            if (!string.IsNullOrEmpty(post.Id))
+                _polling.SeedFeedPostIds(new[] { post.Id });
+
+        _polling.SeedChannelIds(Channels.Channels.Select(c => c.Id));
+        foreach (var ch in Channels.Channels)
+            _polling.SeedChannelMessageIds(ch.Id,
+                ch.Messages.Select(m => m.Id).Where(id => !string.IsNullOrEmpty(id)));
+
+        WirePollingEvents(_polling);
+        await _polling.StartAsync(_pollCts.Token);
+
+        StatusMessage = $"Connected — polling restarted every {_pollIntervalSeconds}s";
+        PollingLog.WriteEntry("Polling restarted successfully", Models.LogEntryType.None);
+        AppLogger.Log("VM", "Polling restarted");
     }
 
     private bool _isShutdown;
@@ -713,7 +768,7 @@ public partial class MainViewModel : ObservableObject
         polling.NewChannelMessageReceived += _onChannel;
         polling.NewChannelDiscovered += _onNewChannel;
         polling.InboxUnreadCountUpdated += (_, count) =>
-            Application.Current.Dispatcher.Invoke(() => Inbox.UnreadCount = count);
+            Application.Current.Dispatcher.Invoke(() => Inbox.UpdateUnreadFromApi(count));
         polling.PollCycleCompleted += _onPollCycle;
         polling.PollError += _onPollError;
         polling.InitialStateLoaded += _onInitialState;

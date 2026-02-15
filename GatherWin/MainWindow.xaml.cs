@@ -659,4 +659,31 @@ public partial class MainWindow : Window
     {
         _viewModel.Channels.ShowInviteCommand.Execute(null);
     }
+
+    private async void RestartPolling_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _viewModel.RestartPollingAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("UI: restart polling failed", ex);
+        }
+    }
+
+    private void ClearLog_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.PollingLog.Entries.Clear();
+    }
+
+    private void CopyDepositAddress_Click(object sender, RoutedEventArgs e)
+    {
+        var addr = _viewModel.Account.DepositAddress;
+        if (!string.IsNullOrEmpty(addr))
+        {
+            System.Windows.Clipboard.SetText(addr);
+            _viewModel.StatusMessage = "Deposit address copied!";
+        }
+    }
 }

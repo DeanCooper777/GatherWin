@@ -323,6 +323,10 @@ public partial class AgentsViewModel : ObservableObject
     [ObservableProperty] private string? _tipError;
     [ObservableProperty] private string? _tipSuccess;
 
+    // Capture agent info at tip-open time so it survives selection changes
+    private string? _tipAgentId;
+    private string? _tipAgentName;
+
     /// <summary>BCH to USD exchange rate, derived from the account balance.</summary>
     public decimal BchToUsdRate { get; set; }
 
@@ -345,6 +349,8 @@ public partial class AgentsViewModel : ObservableObject
     private void ShowTip()
     {
         if (SelectedAgent is null) return;
+        _tipAgentId = SelectedAgent.Id;
+        _tipAgentName = SelectedAgent.Name;
         ShowTipForm = true;
         TipError = null;
         TipSuccess = null;
@@ -365,7 +371,7 @@ public partial class AgentsViewModel : ObservableObject
     [RelayCommand]
     private async Task SendTipAsync(CancellationToken ct)
     {
-        if (SelectedAgent?.Id is null)
+        if (string.IsNullOrEmpty(_tipAgentId))
         {
             TipError = "No agent selected";
             return;
@@ -384,13 +390,13 @@ public partial class AgentsViewModel : ObservableObject
         try
         {
             var msg = string.IsNullOrWhiteSpace(TipMessage) ? null : TipMessage.Trim();
-            var (success, result, error) = await _api.TipAgentAsync(SelectedAgent.Id, amount, msg, ct);
+            var (success, result, error) = await _api.TipAgentAsync(_tipAgentId!, amount, msg, ct);
             if (success)
             {
-                TipSuccess = $"Tipped {amount} BCH to {SelectedAgent.Name}!";
+                TipSuccess = $"Tipped {amount} BCH to {_tipAgentName}!";
                 TipAmount = string.Empty;
                 TipMessage = string.Empty;
-                AppLogger.Log("Agents", $"Tipped {amount} BCH to {SelectedAgent.Name}");
+                AppLogger.Log("Agents", $"Tipped {amount} BCH to {_tipAgentName}");
             }
             else
             {
@@ -405,6 +411,143 @@ public partial class AgentsViewModel : ObservableObject
         finally
         {
             IsTipping = false;
+        }
+    }
+
+    // ── Reviews (Task #13) ──────────────────────────────────────
+
+    public ObservableCollection<ReviewItem> AgentReviews { get; } = new();
+    [ObservableProperty] private bool _showReviews;
+    [ObservableProperty] private bool _isLoadingReviews;
+    [ObservableProperty] private string _reviewsStatus = string.Empty;
+
+    // Submit review form
+    [ObservableProperty] private bool _showReviewForm;
+    [ObservableProperty] private string _reviewSkillId = string.Empty;
+    [ObservableProperty] private string _reviewTask = string.Empty;
+    [ObservableProperty] private int _reviewScore = 5;
+    [ObservableProperty] private string _reviewWhatWorked = string.Empty;
+    [ObservableProperty] private string _reviewWhatFailed = string.Empty;
+    [ObservableProperty] private string _reviewFeedback = string.Empty;
+    [ObservableProperty] private bool _isSubmittingReview;
+    [ObservableProperty] private string? _reviewError;
+    [ObservableProperty] private string? _reviewSuccess;
+
+    [RelayCommand]
+    private async Task ToggleReviewsAsync(CancellationToken ct)
+    {
+        ShowReviews = !ShowReviews;
+        if (!ShowReviews) { AgentReviews.Clear(); ReviewsStatus = string.Empty; return; }
+        await LoadReviewsAsync(ct);
+    }
+
+    private async Task LoadReviewsAsync(CancellationToken ct)
+    {
+        IsLoadingReviews = true;
+        ReviewsStatus = "Loading reviews...";
+
+        try
+        {
+            var response = await _api.GetReviewsAsync(ct);
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                AgentReviews.Clear();
+                if (response?.Reviews is not null)
+                    foreach (var r in response.Reviews)
+                        AgentReviews.Add(r);
+            });
+            ReviewsStatus = AgentReviews.Count > 0
+                ? $"{AgentReviews.Count} review(s)"
+                : "No reviews found";
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Agents: load reviews failed", ex);
+            ReviewsStatus = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsLoadingReviews = false;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenReviewForm()
+    {
+        ShowReviewForm = true;
+        ReviewError = null;
+        ReviewSuccess = null;
+    }
+
+    [RelayCommand]
+    private void CancelReview()
+    {
+        ShowReviewForm = false;
+        ReviewSkillId = string.Empty;
+        ReviewTask = string.Empty;
+        ReviewScore = 5;
+        ReviewWhatWorked = string.Empty;
+        ReviewWhatFailed = string.Empty;
+        ReviewFeedback = string.Empty;
+        ReviewError = null;
+        ReviewSuccess = null;
+    }
+
+    [RelayCommand]
+    private async Task SubmitReviewAsync(CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(ReviewSkillId))
+        {
+            ReviewError = "Skill ID is required";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(ReviewTask))
+        {
+            ReviewError = "Task description is required";
+            return;
+        }
+        if (ReviewScore < 1 || ReviewScore > 10)
+        {
+            ReviewError = "Score must be 1-10";
+            return;
+        }
+
+        IsSubmittingReview = true;
+        ReviewError = null;
+        ReviewSuccess = null;
+
+        try
+        {
+            var worked = string.IsNullOrWhiteSpace(ReviewWhatWorked) ? null : ReviewWhatWorked;
+            var failed = string.IsNullOrWhiteSpace(ReviewWhatFailed) ? null : ReviewWhatFailed;
+            var feedback = string.IsNullOrWhiteSpace(ReviewFeedback) ? null : ReviewFeedback;
+
+            var (success, result, error) = await _api.SubmitReviewAsync(
+                ReviewSkillId.Trim(), ReviewTask.Trim(), ReviewScore,
+                worked, failed, feedback, null, ct);
+
+            if (success)
+            {
+                ReviewSuccess = $"Review submitted! (ID: {result?.ReviewId ?? "?"})";
+                AppLogger.Log("Agents", $"Review submitted for skill {ReviewSkillId}");
+                CancelReview();
+                ReviewSuccess = "Review submitted successfully!";
+                if (ShowReviews)
+                    await LoadReviewsAsync(ct);
+            }
+            else
+            {
+                ReviewError = error ?? "Failed to submit review";
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Agents: submit review failed", ex);
+            ReviewError = ex.Message;
+        }
+        finally
+        {
+            IsSubmittingReview = false;
         }
     }
 

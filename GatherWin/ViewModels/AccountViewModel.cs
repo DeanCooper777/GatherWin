@@ -19,6 +19,8 @@ public partial class AccountViewModel : ObservableObject
     [ObservableProperty] private bool _isSuspended;
     [ObservableProperty] private DateTimeOffset _tokenExpiry;
     [ObservableProperty] private bool _isAuthenticated;
+    [ObservableProperty] private string? _depositAddress;
+    [ObservableProperty] private bool _showDeposit;
 
     public AccountViewModel(GatherApiClient api)
     {
@@ -42,6 +44,11 @@ public partial class AccountViewModel : ObservableObject
         PostsAvailable = hasBch && hasPostFee && postFee > 0 ? (int)(bchAmount / postFee) : 0;
         CommentsAvailable = hasBch && hasCommentFee && commentFee > 0 ? (int)(bchAmount / commentFee) : 0;
     }
+
+    // ── BCH Deposit (Task #9) ─────────────────────────────────
+
+    [RelayCommand]
+    private void ToggleDeposit() => ShowDeposit = !ShowDeposit;
 
     // ── Platform Feedback (Task #16) ───────────────────────────
 

@@ -14,6 +14,7 @@ public partial class ChannelInfo : ObservableObject
     [ObservableProperty] private string _description = string.Empty;
     [ObservableProperty] private int _memberCount;
     [ObservableProperty] private int _newMessageCount;
+    [ObservableProperty] private string _role = string.Empty;
 
     public ObservableCollection<ActivityItem> Messages { get; } = new();
 
@@ -68,6 +69,13 @@ public partial class ChannelsViewModel : ObservableObject
     public ChannelsViewModel(GatherApiClient api)
     {
         _api = api;
+    }
+
+    partial void OnSelectedChannelChanged(ChannelInfo? value)
+    {
+        // Auto-refresh member list when switching channels (if panel is open)
+        if (ShowChannelDetail && value is not null)
+            _ = RefreshChannelDetailAsync(CancellationToken.None);
     }
 
     partial void OnShowAllChannelsChanged(bool value)
@@ -132,7 +140,8 @@ public partial class ChannelsViewModel : ObservableObject
                                 Id = ch.Id ?? "",
                                 Name = ch.Name ?? "",
                                 Description = ch.Description ?? "",
-                                MemberCount = ch.MemberCount
+                                MemberCount = ch.MemberCount,
+                                Role = ch.Role ?? ""
                             };
                         }
                         else
@@ -140,6 +149,7 @@ public partial class ChannelsViewModel : ObservableObject
                             info.Name = ch.Name ?? info.Name;
                             info.Description = ch.Description ?? info.Description;
                             info.MemberCount = ch.MemberCount;
+                            info.Role = ch.Role ?? info.Role;
                         }
                         _allChannels.Add(info);
                     }
@@ -693,16 +703,20 @@ public partial class ChannelsViewModel : ObservableObject
     public ObservableCollection<ChannelMember> ChannelMembers { get; } = new();
 
     [RelayCommand]
-    private async Task LoadChannelDetailAsync(CancellationToken ct)
+    private async Task ToggleChannelDetailAsync(CancellationToken ct)
     {
-        if (SelectedChannel is null) return;
-
         ShowChannelDetail = !ShowChannelDetail;
         if (!ShowChannelDetail)
         {
             Application.Current.Dispatcher.Invoke(() => ChannelMembers.Clear());
             return;
         }
+        await RefreshChannelDetailAsync(ct);
+    }
+
+    private async Task RefreshChannelDetailAsync(CancellationToken ct)
+    {
+        if (SelectedChannel is null) return;
 
         IsLoadingDetail = true;
 
@@ -716,6 +730,7 @@ public partial class ChannelsViewModel : ObservableObject
                 {
                     foreach (var m in detail.Members)
                         ChannelMembers.Add(m);
+                    SelectedChannel.MemberCount = detail.Members.Count;
                 }
             });
 

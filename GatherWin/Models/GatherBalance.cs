@@ -11,6 +11,17 @@ public class BalanceResponse
     public bool Suspended { get; set; }
 }
 
+public class FeesResponse
+{
+    public string? DepositAddress { get; set; }
+    public string? PostFeeBch { get; set; }
+    public string? CommentFeeBch { get; set; }
+    public int PostFreeWeekly { get; set; }
+    public int CommentFreeDaily { get; set; }
+    public string? PostFeeUsd { get; set; }
+    public string? CommentFeeUsd { get; set; }
+}
+
 public class TipResponse
 {
     public decimal FromBalanceBch { get; set; }
