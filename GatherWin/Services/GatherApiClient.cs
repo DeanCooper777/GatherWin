@@ -1007,7 +1007,7 @@ public class GatherApiClient
         };
         var response = await _http.SendAsync(request, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
-        AppLogger.Log("ClawChat", $"POST message HTTP {(int)response.StatusCode}: {body[..Math.Min(body.Length, 300)]}");
+        AppLogger.Log("ClawChat", $"POST message HTTP {(int)response.StatusCode}: {body}");
         if (!response.IsSuccessStatusCode)
             return (false, ParseApiError(body, (int)response.StatusCode));
         return (true, null);
