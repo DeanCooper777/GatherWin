@@ -17,6 +17,7 @@
         <converters:StreamTypeToBorderBrushConverter x:Key="StreamToBorder"/>
         <converters:InverseBooleanConverter x:Key="InverseBool"/>
         <converters:NotNullToVisibilityConverter x:Key="NotNullToVis"/>
+        <converters:NullToVisibilityConverter x:Key="NullToVis"/>
         <converters:TimestampToRelativeConverter x:Key="TimeAgo"/>
         <converters:NotZeroToVisibilityConverter x:Key="NotZeroToVis"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -1056,9 +1057,19 @@
                                                             </Style>
                                                         </TextBlock.Style>
                                                     </TextBlock>
-                                                    <Border Grid.Column="1" Background="#3498DB" CornerRadius="3"
-                                                            Padding="4,1" Margin="4,0,0,0" VerticalAlignment="Center"
-                                                            Visibility="{Binding Read, Converter={StaticResource InverseBool}, ConverterParameter=Visibility}">
+                                                    <Border Grid.Column="1" CornerRadius="3"
+                                                            Padding="4,1" Margin="4,0,0,0" VerticalAlignment="Center">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="#3498DB"/>
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Direction}" Value="outbound">
+                                                                        <Setter Property="Background" Value="#95A5A6"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
                                                         <TextBlock Text="{Binding Direction}" Foreground="White"
                                                                    FontSize="9" FontWeight="SemiBold"/>
                                                     </Border>
@@ -1083,13 +1094,22 @@
                                 Background="White" Margin="4,0,0,0">
                             <Grid>
                                 <!-- Email detail -->
-                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12"
-                                              Visibility="{Binding Email.ShowCompose, Converter={StaticResource InverseBool}, ConverterParameter=Visibility}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                                    <ScrollViewer.Style>
+                                        <Style TargetType="ScrollViewer">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Email.ShowCompose}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ScrollViewer.Style>
                                     <StackPanel>
                                         <TextBlock Text="Select an email to read"
                                                    FontSize="12" Foreground="#999" FontStyle="Italic"
                                                    HorizontalAlignment="Center" Margin="0,40,0,0"
-                                                   Visibility="{Binding Email.SelectedEmail, Converter={StaticResource NotNullToVis}, ConverterParameter=Inverse}"/>
+                                                   Visibility="{Binding Email.SelectedEmailDetail, Converter={StaticResource NullToVis}}"/>
 
                                         <StackPanel Visibility="{Binding Email.SelectedEmailDetail, Converter={StaticResource NotNullToVis}}">
                                             <TextBlock Text="{Binding Email.SelectedEmailDetail.Subject}"
@@ -2970,8 +2990,7 @@
                                                Visibility="{Binding Shop.IsLoadingOptions, Converter={StaticResource BoolToVis}}"/>
 
                                     <!-- Product options -->
-                                    <ItemsControl ItemsSource="{Binding Shop.OptionGroups}"
-                                                  Visibility="{Binding Shop.IsLoadingOptions, Converter={StaticResource BoolToVis}, ConverterParameter=Inverse}">
+                                    <ItemsControl ItemsSource="{Binding Shop.OptionGroups}">
                                         <ItemsControl.Style>
                                             <Style TargetType="ItemsControl">
                                                 <Setter Property="Visibility" Value="Visible"/>
