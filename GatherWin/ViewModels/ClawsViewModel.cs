@@ -251,22 +251,40 @@ public partial class ClawsViewModel : ObservableObject
 
         try
         {
-            var (ok, err) = await _api.PostClawMessageAsync(SelectedClaw.Id, msg, PbToken.Trim(), ct);
+            // Add a placeholder for the streaming reply; capture its index
+            int replyIdx = -1;
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                ChatMessages.Add(new ClawChatMessage { Role = "assistant", Body = "…" });
+                replyIdx = ChatMessages.Count - 1;
+            });
+
+            var replyText = new System.Text.StringBuilder();
+            var (ok, _, err) = await _api.PostClawMessageStreamAsync(
+                SelectedClaw.Id, msg, PbToken.Trim(),
+                chunk =>
+                {
+                    replyText.Append(chunk);
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (replyIdx >= 0 && replyIdx < ChatMessages.Count)
+                            ChatMessages[replyIdx] = new ClawChatMessage
+                            {
+                                Role = "assistant",
+                                Body = replyText.ToString(),
+                                Timestamp = DateTime.Now.ToString("HH:mm:ss")
+                            };
+                    });
+                }, ct);
+
             if (!ok)
             {
-                ChatError = err?.Contains("502") == true
-                    ? "Claw failed to respond (agent error — try restarting it on gather.is)"
-                    : err;
-                return;
-            }
-
-            // Poll a few times for the claw's reply
-            for (int i = 0; i < 6; i++)
-            {
-                await Task.Delay(2000, ct);
-                var before = ChatMessages.Count;
-                await LoadClawMessagesAsync(SelectedClaw, _lastMessageTime, ct);
-                if (ChatMessages.Count > before) break; // got a reply
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    if (replyIdx >= 0 && replyIdx < ChatMessages.Count)
+                        ChatMessages.RemoveAt(replyIdx);
+                });
+                ChatError = err;
             }
         }
         catch (Exception ex)

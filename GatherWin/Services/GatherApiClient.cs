@@ -997,20 +997,64 @@ public class GatherApiClient
         return body;
     }
 
-    public async Task<(bool Success, string? Error)> PostClawMessageAsync(string clawId, string message, string pbToken, CancellationToken ct)
+    public async Task<(bool Success, string? Reply, string? Error)> PostClawMessageStreamAsync(
+        string clawId, string message, string pbToken,
+        Action<string> onChunk, CancellationToken ct)
     {
         var payload = new Dictionary<string, string> { ["body"] = message };
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{GatherBaseUrl}/api/claws/{clawId}/messages")
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{GatherBaseUrl}/api/claws/{clawId}/messages/stream")
         {
             Headers = { Authorization = new AuthenticationHeaderValue("Bearer", pbToken) },
             Content = JsonContent.Create(payload, options: _jsonOpts)
         };
-        var response = await _http.SendAsync(request, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        AppLogger.Log("ClawChat", $"POST message HTTP {(int)response.StatusCode}: {body}");
+
+        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        AppLogger.Log("ClawChat", $"POST stream HTTP {(int)response.StatusCode}");
+
         if (!response.IsSuccessStatusCode)
-            return (false, ParseApiError(body, (int)response.StatusCode));
-        return (true, null);
+        {
+            var errBody = await response.Content.ReadAsStringAsync(ct);
+            AppLogger.Log("ClawChat", $"Stream error: {errBody}");
+            return (false, null, ParseApiError(errBody, (int)response.StatusCode));
+        }
+
+        using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var reader = new System.IO.StreamReader(stream);
+        var reply = new System.Text.StringBuilder();
+
+        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break;
+            AppLogger.Log("ClawStream", line);
+            if (!line.StartsWith("data:")) continue;
+            var data = line["data:".Length..].Trim();
+            if (data == "[DONE]") break;
+            if (string.IsNullOrEmpty(data)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(data);
+                var root = doc.RootElement;
+                // Try common SSE chunk shapes
+                string? chunk = null;
+                if (root.TryGetProperty("text", out var t)) chunk = t.GetString();
+                else if (root.TryGetProperty("content", out var c)) chunk = c.GetString();
+                else if (root.TryGetProperty("delta", out var d))
+                {
+                    if (d.TryGetProperty("text", out var dt)) chunk = dt.GetString();
+                    else if (d.TryGetProperty("content", out var dc)) chunk = dc.GetString();
+                }
+                if (!string.IsNullOrEmpty(chunk))
+                {
+                    reply.Append(chunk);
+                    onChunk(chunk);
+                }
+            }
+            catch { /* non-JSON line, skip */ }
+        }
+
+        return (true, reply.ToString(), null);
     }
 
     // ── Shop Orders ──────────────────────────────────────────────
