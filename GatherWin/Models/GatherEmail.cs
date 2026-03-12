@@ -17,6 +17,23 @@ public class EmailDetail : EmailItem
     public string? BodyHtml { get; set; }
     public string? MessageId { get; set; }
     public string? InReplyTo { get; set; }
+
+    /// <summary>Plain-text representation for display: uses BodyText if available,
+    /// otherwise strips HTML tags from BodyHtml.</summary>
+    public string BodyDisplay
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(BodyText)) return BodyText;
+            if (string.IsNullOrEmpty(BodyHtml)) return string.Empty;
+            // Replace block-level tags with newlines, then strip remaining tags
+            var text = System.Text.RegularExpressions.Regex.Replace(BodyHtml, @"<br\s*/?>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"</p>|</div>|</li>|</tr>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"<[^>]+>", string.Empty);
+            text = System.Net.WebUtility.HtmlDecode(text);
+            return text.Trim();
+        }
+    }
 }
 
 public class EmailListResponse

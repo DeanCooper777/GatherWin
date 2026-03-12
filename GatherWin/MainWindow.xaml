@@ -1128,7 +1128,7 @@
                                             <TextBlock Text="{Binding Email.SelectedEmailDetail.Created, Converter={StaticResource TimeAgo}}"
                                                        FontSize="10" Foreground="#999" Margin="0,0,0,8"/>
                                             <Border BorderBrush="#E0E0E0" BorderThickness="0,1,0,0" Margin="0,0,0,8"/>
-                                            <TextBox Text="{Binding Email.SelectedEmailDetail.BodyText, Mode=OneWay}"
+                                            <TextBox Text="{Binding Email.SelectedEmailDetail.BodyDisplay, Mode=OneWay}"
                                                      IsReadOnly="True" TextWrapping="Wrap" FontSize="12"
                                                      BorderThickness="0" Background="Transparent"
                                                      VerticalScrollBarVisibility="Disabled"/>
