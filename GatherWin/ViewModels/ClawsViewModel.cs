@@ -45,6 +45,214 @@ public partial class ClawsViewModel : ObservableObject
     [ObservableProperty] private bool _isSendingChat;
     [ObservableProperty] private string? _chatError;
 
+    // ── Panel mode ────────────────────────────────────────────────
+
+    [ObservableProperty] private string _clawPanel = "chat"; // chat | settings | env | logs
+
+    public bool IsClawPanelChat     => ClawPanel == "chat";
+    public bool IsClawPanelSettings => ClawPanel == "settings";
+    public bool IsClawPanelEnv      => ClawPanel == "env";
+    public bool IsClawPanelLogs     => ClawPanel == "logs";
+
+    partial void OnClawPanelChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsClawPanelChat));
+        OnPropertyChanged(nameof(IsClawPanelSettings));
+        OnPropertyChanged(nameof(IsClawPanelEnv));
+        OnPropertyChanged(nameof(IsClawPanelLogs));
+
+        if (SelectedClaw is null) return;
+        if (value == "settings") LoadSettingsFromClaw(SelectedClaw);
+        else if (value == "env")  _ = LoadEnvAsync(SelectedClaw, CancellationToken.None);
+        else if (value == "logs") _ = RefreshLogsAsync(CancellationToken.None);
+    }
+
+    [RelayCommand]
+    private void ShowClawPanel(string panel) => ClawPanel = panel;
+
+    // ── Settings ──────────────────────────────────────────────────
+
+    [ObservableProperty] private bool _settingsIsPublic;
+    [ObservableProperty] private int _settingsHeartbeatInterval;
+    [ObservableProperty] private string _settingsHeartbeatInstruction = string.Empty;
+    [ObservableProperty] private bool _isSavingSettings;
+    [ObservableProperty] private string? _settingsError;
+    [ObservableProperty] private string? _settingsSuccess;
+
+    private void LoadSettingsFromClaw(ClawItem claw)
+    {
+        SettingsIsPublic = claw.IsPublic;
+        SettingsHeartbeatInterval = claw.HeartbeatInterval;
+        SettingsHeartbeatInstruction = claw.HeartbeatInstruction ?? string.Empty;
+        SettingsError = null;
+        SettingsSuccess = null;
+    }
+
+    [RelayCommand]
+    private async Task SaveSettingsAsync(CancellationToken ct)
+    {
+        if (SelectedClaw?.Id is null || string.IsNullOrWhiteSpace(PbToken)) return;
+        IsSavingSettings = true;
+        SettingsError = null;
+        SettingsSuccess = null;
+        try
+        {
+            var ok = await _api.PatchClawAsync(
+                SelectedClaw.Id,
+                SettingsIsPublic,
+                SettingsHeartbeatInterval,
+                SettingsHeartbeatInstruction,
+                PbToken.Trim(), ct);
+
+            if (ok)
+            {
+                SettingsSuccess = "Settings saved";
+                // Update the local ClawItem so re-entering settings shows fresh values
+                SelectedClaw.IsPublic = SettingsIsPublic;
+                SelectedClaw.HeartbeatInterval = SettingsHeartbeatInterval;
+                SelectedClaw.HeartbeatInstruction = SettingsHeartbeatInstruction;
+                AppLogger.Log("Claws", $"Settings saved for {SelectedClaw.Name}");
+            }
+            else
+            {
+                SettingsError = "Failed to save settings";
+            }
+        }
+        catch (Exception ex)
+        {
+            SettingsError = ex.Message;
+            AppLogger.LogError("Claws: save settings failed", ex);
+        }
+        finally { IsSavingSettings = false; }
+    }
+
+    // ── Environment Variables ─────────────────────────────────────
+
+    [ObservableProperty] private string _envModelProvider = string.Empty;
+    [ObservableProperty] private string _envAnthropicApiKey = string.Empty;
+    [ObservableProperty] private string _envAnthropicApiBase = string.Empty;
+    [ObservableProperty] private string _envAnthropicModel = string.Empty;
+    [ObservableProperty] private string _envTelegramBot = string.Empty;
+    [ObservableProperty] private string _envTelegramChatId = string.Empty;
+    [ObservableProperty] private bool _envRestartAfterSave = true;
+    [ObservableProperty] private bool _isLoadingEnv;
+    [ObservableProperty] private bool _isSavingEnv;
+    [ObservableProperty] private string? _envError;
+    [ObservableProperty] private string? _envSuccess;
+
+    private async Task LoadEnvAsync(ClawItem claw, CancellationToken ct)
+    {
+        if (claw.Id is null || string.IsNullOrWhiteSpace(PbToken)) return;
+        IsLoadingEnv = true;
+        EnvError = null;
+        EnvSuccess = null;
+        try
+        {
+            var vars = await _api.GetClawEnvAsync(claw.Id, PbToken.Trim(), ct);
+            if (vars != null)
+            {
+                EnvModelProvider    = vars.GetValueOrDefault("MODEL_PROVIDER", string.Empty);
+                EnvAnthropicApiKey  = vars.GetValueOrDefault("ANTHROPIC_API_KEY", string.Empty);
+                EnvAnthropicApiBase = vars.GetValueOrDefault("ANTHROPIC_API_BASE", string.Empty);
+                EnvAnthropicModel   = vars.GetValueOrDefault("ANTHROPIC_MODEL", string.Empty);
+                EnvTelegramBot      = vars.GetValueOrDefault("TELEGRAM_BOT", string.Empty);
+                EnvTelegramChatId   = vars.GetValueOrDefault("TELEGRAM_CHAT_ID", string.Empty);
+            }
+        }
+        catch (Exception ex) { EnvError = ex.Message; }
+        finally { IsLoadingEnv = false; }
+    }
+
+    [RelayCommand]
+    private async Task SaveEnvAsync(CancellationToken ct)
+    {
+        if (SelectedClaw?.Id is null || string.IsNullOrWhiteSpace(PbToken)) return;
+        IsSavingEnv = true;
+        EnvError = null;
+        EnvSuccess = null;
+        try
+        {
+            var vars = new Dictionary<string, string>();
+            if (!string.IsNullOrEmpty(EnvModelProvider))    vars["MODEL_PROVIDER"]     = EnvModelProvider;
+            if (!string.IsNullOrEmpty(EnvAnthropicApiKey))  vars["ANTHROPIC_API_KEY"]  = EnvAnthropicApiKey;
+            if (!string.IsNullOrEmpty(EnvAnthropicApiBase)) vars["ANTHROPIC_API_BASE"] = EnvAnthropicApiBase;
+            if (!string.IsNullOrEmpty(EnvAnthropicModel))   vars["ANTHROPIC_MODEL"]    = EnvAnthropicModel;
+            if (!string.IsNullOrEmpty(EnvTelegramBot))      vars["TELEGRAM_BOT"]       = EnvTelegramBot;
+            if (!string.IsNullOrEmpty(EnvTelegramChatId))   vars["TELEGRAM_CHAT_ID"]   = EnvTelegramChatId;
+
+            var ok = await _api.PutClawEnvAsync(SelectedClaw.Id, vars, EnvRestartAfterSave, PbToken.Trim(), ct);
+            if (ok)
+                EnvSuccess = EnvRestartAfterSave ? "Env saved — claw restarted" : "Env saved";
+            else
+                EnvError = "Failed to save env vars";
+        }
+        catch (Exception ex) { EnvError = ex.Message; }
+        finally { IsSavingEnv = false; }
+    }
+
+    // ── Logs ──────────────────────────────────────────────────────
+
+    [ObservableProperty] private string _logsText = string.Empty;
+    [ObservableProperty] private bool _isLoadingLogs;
+
+    [RelayCommand]
+    private async Task RefreshLogsAsync(CancellationToken ct)
+    {
+        if (SelectedClaw?.Id is null || string.IsNullOrWhiteSpace(PbToken)) return;
+        IsLoadingLogs = true;
+        try
+        {
+            var logs = await _api.GetClawLogsAsync(SelectedClaw.Id, 200, PbToken.Trim(), ct);
+            LogsText = logs ?? "(no logs available)";
+        }
+        catch (Exception ex) { LogsText = $"Error: {ex.Message}"; }
+        finally { IsLoadingLogs = false; }
+    }
+
+    // ── Restart ───────────────────────────────────────────────────
+
+    [ObservableProperty] private bool _isRestarting;
+
+    [RelayCommand]
+    private async Task RestartClawAsync(CancellationToken ct)
+    {
+        if (SelectedClaw?.Id is null || string.IsNullOrWhiteSpace(PbToken)) return;
+        IsRestarting = true;
+        try
+        {
+            var ok = await _api.RestartClawAsync(SelectedClaw.Id, PbToken.Trim(), ct);
+            StatusText = ok ? $"Restarted {SelectedClaw.Name}" : "Restart failed";
+            if (ok) AppLogger.Log("Claws", $"Restarted claw: {SelectedClaw.Name}");
+        }
+        catch (Exception ex) { StatusText = $"Restart error: {ex.Message}"; }
+        finally { IsRestarting = false; }
+    }
+
+    // ── Delete ────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task DeleteClawAsync(CancellationToken ct)
+    {
+        if (SelectedClaw?.Id is null || string.IsNullOrWhiteSpace(PbToken)) return;
+        var clawToDelete = SelectedClaw;
+        var ok = await _api.DeleteClawAsync(clawToDelete.Id, PbToken.Trim(), ct);
+        if (ok)
+        {
+            var name = clawToDelete.Name ?? clawToDelete.Id;
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                Claws.Remove(clawToDelete);
+                SelectedClaw = null;
+            });
+            StatusText = $"Deleted {name}";
+            AppLogger.Log("Claws", $"Deleted claw: {name}");
+        }
+        else
+        {
+            StatusText = "Delete failed";
+        }
+    }
+
     public ClawsViewModel(GatherApiClient api)
     {
         _api = api;
@@ -55,6 +263,7 @@ public partial class ClawsViewModel : ObservableObject
         ChatMessages.Clear();
         ChatError = null;
         _lastMessageTime = null;
+        ClawPanel = "chat";
         if (value is null) return;
         _ = LoadClawMessagesAsync(value, since: null, CancellationToken.None);
     }
@@ -277,7 +486,21 @@ public partial class ClawsViewModel : ObservableObject
                                 Timestamp = DateTime.Now.ToString("HH:mm:ss")
                             };
                     });
-                }, ct);
+                }, ct,
+                finalText =>
+                {
+                    // "end" event — replace placeholder with the final complete reply
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (replyIdx >= 0 && replyIdx < ChatMessages.Count)
+                            ChatMessages[replyIdx] = new ClawChatMessage
+                            {
+                                Role = "assistant",
+                                Body = finalText,
+                                Timestamp = DateTime.Now.ToString("HH:mm:ss")
+                            };
+                    });
+                });
 
             if (!ok)
             {

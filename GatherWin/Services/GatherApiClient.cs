@@ -937,7 +937,6 @@ public class GatherApiClient
         var response = await _http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
-        AppLogger.Log("ClawList", $"Raw JSON: {body}");
         return JsonSerializer.Deserialize<ClawsListResponse>(body, _jsonOpts);
     }
 
@@ -948,7 +947,6 @@ public class GatherApiClient
         var response = await _http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
-        AppLogger.Log("ClawDetail", $"Raw JSON: {body}");
         return JsonSerializer.Deserialize<ClawItem>(body, _jsonOpts);
     }
 
@@ -999,7 +997,8 @@ public class GatherApiClient
 
     public async Task<(bool Success, string? Reply, string? Error)> PostClawMessageStreamAsync(
         string clawId, string message, string pbToken,
-        Action<string> onChunk, CancellationToken ct)
+        Action<string> onChunk, CancellationToken ct,
+        Action<string>? onFinalReply = null)
     {
         var payload = new Dictionary<string, string> { ["body"] = message };
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{GatherBaseUrl}/api/claws/{clawId}/messages/stream")
@@ -1036,25 +1035,126 @@ public class GatherApiClient
             {
                 using var doc = JsonDocument.Parse(data);
                 var root = doc.RootElement;
-                // Try common SSE chunk shapes
-                string? chunk = null;
-                if (root.TryGetProperty("text", out var t)) chunk = t.GetString();
-                else if (root.TryGetProperty("content", out var c)) chunk = c.GetString();
-                else if (root.TryGetProperty("delta", out var d))
+                var eventType = root.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
+
+                if (eventType == "end")
                 {
-                    if (d.TryGetProperty("text", out var dt)) chunk = dt.GetString();
-                    else if (d.TryGetProperty("content", out var dc)) chunk = dc.GetString();
+                    // "end" contains the final complete reply — replace accumulated text
+                    if (root.TryGetProperty("text", out var endTextEl))
+                    {
+                        var finalText = endTextEl.GetString() ?? string.Empty;
+                        if (finalText.Length > 0)
+                        {
+                            reply.Clear();
+                            reply.Append(finalText);
+                            onFinalReply?.Invoke(finalText);
+                        }
+                    }
                 }
-                if (!string.IsNullOrEmpty(chunk))
+                else if (eventType is "done" or "tool_call" or "tool_result" or "error")
                 {
-                    reply.Append(chunk);
-                    onChunk(chunk);
+                    // metadata/tool events — not part of the reply text
+                }
+                else
+                {
+                    // "text" streaming chunk or unknown format
+                    string? chunk = null;
+                    if (root.TryGetProperty("text", out var t)) chunk = t.GetString();
+                    else if (root.TryGetProperty("content", out var c)) chunk = c.GetString();
+                    else if (root.TryGetProperty("delta", out var d))
+                    {
+                        if (d.TryGetProperty("text", out var dt)) chunk = dt.GetString();
+                        else if (d.TryGetProperty("content", out var dc)) chunk = dc.GetString();
+                    }
+                    if (!string.IsNullOrEmpty(chunk))
+                    {
+                        reply.Append(chunk);
+                        onChunk(chunk);
+                    }
                 }
             }
             catch { /* non-JSON line, skip */ }
         }
 
         return (true, reply.ToString(), null);
+    }
+
+    // ── Claw Management ───────────────────────────────────────────
+
+    public async Task<bool> PatchClawAsync(string clawId, bool isPublic, int heartbeatInterval,
+        string heartbeatInstruction, string pbToken, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            ["is_public"] = isPublic,
+            ["heartbeat_interval"] = heartbeatInterval,
+            ["heartbeat_instruction"] = heartbeatInstruction
+        };
+        using var request = new HttpRequestMessage(new HttpMethod("PATCH"), $"{GatherBaseUrl}/api/claws/{clawId}")
+        {
+            Headers = { Authorization = new AuthenticationHeaderValue("Bearer", pbToken) },
+            Content = JsonContent.Create(payload, options: _jsonOpts)
+        };
+        var response = await _http.SendAsync(request, ct);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<Dictionary<string, string>?> GetClawEnvAsync(string clawId, string pbToken, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{GatherBaseUrl}/api/claws/{clawId}/env");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
+        var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(body);
+        if (!doc.RootElement.TryGetProperty("vars", out var vars)) return null;
+        var result = new Dictionary<string, string>();
+        foreach (var prop in vars.EnumerateObject())
+            result[prop.Name] = prop.Value.GetString() ?? string.Empty;
+        return result;
+    }
+
+    public async Task<bool> PutClawEnvAsync(string clawId, Dictionary<string, string> vars,
+        bool restart, string pbToken, CancellationToken ct)
+    {
+        var payload = new { vars, restart };
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"{GatherBaseUrl}/api/claws/{clawId}/env")
+        {
+            Headers = { Authorization = new AuthenticationHeaderValue("Bearer", pbToken) },
+            Content = JsonContent.Create(payload, options: _jsonOpts)
+        };
+        var response = await _http.SendAsync(request, ct);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<bool> RestartClawAsync(string clawId, string pbToken, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{GatherBaseUrl}/api/claws/{clawId}/restart")
+        {
+            Headers = { Authorization = new AuthenticationHeaderValue("Bearer", pbToken) },
+            Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json")
+        };
+        var response = await _http.SendAsync(request, ct);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<string?> GetClawLogsAsync(string clawId, int tail, string pbToken, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{GatherBaseUrl}/api/claws/{clawId}/logs?tail={tail}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
+        var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.TryGetProperty("logs", out var logs) ? logs.GetString() : body;
+    }
+
+    public async Task<bool> DeleteClawAsync(string clawId, string pbToken, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"{GatherBaseUrl}/api/claws/{clawId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
+        var response = await _http.SendAsync(request, ct);
+        return response.IsSuccessStatusCode;
     }
 
     // ── Shop Orders ──────────────────────────────────────────────
