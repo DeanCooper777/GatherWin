@@ -3333,6 +3333,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
@@ -3358,8 +3359,27 @@
                         </Grid>
                     </Border>
 
+                    <!-- Session token bar (always visible) -->
+                    <Border Grid.Row="1" Background="#EDE7F6" Padding="8,6" CornerRadius="4"
+                            BorderBrush="#B39DDB" BorderThickness="1" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Session Token:" FontSize="11"
+                                       Foreground="#4A148C" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding Claws.PbToken, UpdateSourceTrigger=PropertyChanged}"
+                                     FontSize="11" FontFamily="Consolas" Padding="5,3"
+                                     BorderBrush="#B39DDB" BorderThickness="1"
+                                     ToolTip="Your Gather.is web session token (from pocketbase_auth in localStorage)"/>
+                        </Grid>
+                    </Border>
+
                     <!-- Deploy form -->
-                    <Border Grid.Row="1" Background="#F3E5F5" Padding="12,10" CornerRadius="4"
+                    <Border Grid.Row="2" Background="#F3E5F5" Padding="12,10" CornerRadius="4"
                             BorderBrush="#CE93D8" BorderThickness="1" Margin="0,0,0,8"
                             Visibility="{Binding Claws.ShowDeployForm, Converter={StaticResource BoolToVis}}">
                         <StackPanel>
@@ -3434,16 +3454,6 @@
                                 <TextBox Grid.Column="1" Text="{Binding Claws.DeployGithubRepo, UpdateSourceTrigger=PropertyChanged}"
                                          FontSize="11" Padding="6,4" BorderBrush="#CE93D8" BorderThickness="1"/>
                             </Grid>
-                            <Grid Margin="0,0,0,6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="100"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Session Token:" FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
-                                <TextBox Grid.Column="1" Text="{Binding Claws.PbToken, UpdateSourceTrigger=PropertyChanged}"
-                                         FontSize="11" Padding="6,4" BorderBrush="#CE93D8" BorderThickness="1"
-                                         FontFamily="Consolas"/>
-                            </Grid>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding Claws.DeployError}" Foreground="#E74C3C"
                                            FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"
@@ -3463,7 +3473,7 @@
                     </Border>
 
                     <!-- Claws list -->
-                    <Border Grid.Row="2" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" Background="White">
+                    <Border Grid.Row="3" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" Background="White">
                         <Grid>
                             <ListBox ItemsSource="{Binding Claws.Claws}"
                                      SelectedItem="{Binding Claws.SelectedClaw}"

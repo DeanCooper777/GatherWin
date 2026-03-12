@@ -43,12 +43,18 @@ public partial class ClawsViewModel : ObservableObject
     public async Task LoadClawsAsync(CancellationToken ct)
     {
         if (IsLoading) return;
+        if (string.IsNullOrWhiteSpace(PbToken))
+        {
+            StatusText = "Enter your Gather.is session token and click Refresh";
+            return;
+        }
+
         IsLoading = true;
         StatusText = "Loading claws...";
 
         try
         {
-            var response = await _api.GetClawsAsync(ct);
+            var response = await _api.GetClawsAsync(ct, PbToken.Trim());
             Application.Current.Dispatcher.Invoke(() =>
             {
                 Claws.Clear();

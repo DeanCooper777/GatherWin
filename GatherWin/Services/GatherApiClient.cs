@@ -930,18 +930,22 @@ public class GatherApiClient
 
     // ── Claws ─────────────────────────────────────────────────────
 
-    public async Task<ClawsListResponse?> GetClawsAsync(CancellationToken ct)
+    public async Task<ClawsListResponse?> GetClawsAsync(CancellationToken ct, string? pbToken = null)
     {
-        var response = await AuthenticatedGetAsync("/api/claws", ct);
-        if (response is null || !response.IsSuccessStatusCode) return null;
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{GatherBaseUrl}/api/claws");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", pbToken ?? "");
+        var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
         return JsonSerializer.Deserialize<ClawsListResponse>(body, _jsonOpts);
     }
 
-    public async Task<ClawItem?> GetClawDetailAsync(string clawId, CancellationToken ct)
+    public async Task<ClawItem?> GetClawDetailAsync(string clawId, CancellationToken ct, string? pbToken = null)
     {
-        var response = await AuthenticatedGetAsync($"/api/claws/{clawId}", ct);
-        if (response is null || !response.IsSuccessStatusCode) return null;
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{GatherBaseUrl}/api/claws/{clawId}");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", pbToken ?? "");
+        var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
         return JsonSerializer.Deserialize<ClawItem>(body, _jsonOpts);
     }
