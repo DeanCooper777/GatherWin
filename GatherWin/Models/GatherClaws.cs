@@ -39,6 +39,15 @@ public class ClawDeployRequest
     public string? AgentType { get; set; }
 }
 
+/// <summary>Local-only chat message for claw conversation display.</summary>
+public class ClawChatMessage
+{
+    public string Role { get; init; } = "user"; // "user" or "assistant"
+    public string Body { get; init; } = string.Empty;
+    public string Timestamp { get; init; } = DateTime.Now.ToString("HH:mm:ss");
+    public bool IsUser => Role == "user";
+}
+
 public class ClawUpdateRequest
 {
     public bool? IsPublic { get; set; }

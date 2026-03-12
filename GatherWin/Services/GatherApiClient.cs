@@ -981,6 +981,61 @@ public class GatherApiClient
         catch (Exception ex) { return (false, null, ex.Message); }
     }
 
+    // ── Claw Chat ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Authenticates via the Gather session bridge so the claw subdomain will accept
+    /// our requests, then POSTs a message to the claw's /api/chat endpoint.
+    /// </summary>
+    public async Task<(bool Success, string? ResponseBody, string? Error)> SendClawChatAsync(
+        string clawUrl, string message, string? conversationId, string pbToken, CancellationToken ct)
+    {
+        try
+        {
+            // Use a dedicated handler with cookie support so the session bridge can set
+            // the claw-subdomain session cookie before we send the chat request.
+            var handler = new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                UseCookies = true,
+                CookieContainer = new CookieContainer()
+            };
+            using var client = new HttpClient(handler);
+
+            // 1. Authenticate: call session bridge so the claw subdomain trusts us
+            var bridgeUrl = $"{GatherBaseUrl}/api/auth/session-bridge?redirect={Uri.EscapeDataString(clawUrl + "/")}";
+            using var bridgeReq = new HttpRequestMessage(HttpMethod.Get, bridgeUrl);
+            bridgeReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
+            var bridgeResp = await client.SendAsync(bridgeReq, ct);
+            AppLogger.Log("ClawChat", $"Session bridge → HTTP {(int)bridgeResp.StatusCode}");
+
+            // 2. POST message to /api/chat
+            var payload = new Dictionary<string, object?>
+            {
+                ["messages"] = new[] { new Dictionary<string, string> { ["role"] = "user", ["content"] = message } }
+            };
+            if (!string.IsNullOrEmpty(conversationId))
+                payload["conversation_id"] = conversationId;
+
+            using var chatReq = new HttpRequestMessage(HttpMethod.Post, $"{clawUrl}/api/chat")
+            {
+                Content = JsonContent.Create(payload, options: _jsonOpts)
+            };
+            chatReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
+
+            var chatResp = await client.SendAsync(chatReq, ct);
+            var body = await chatResp.Content.ReadAsStringAsync(ct);
+            AppLogger.Log("ClawChat", $"Chat HTTP {(int)chatResp.StatusCode}: {body[..Math.Min(body.Length, 300)]}");
+
+            if (!chatResp.IsSuccessStatusCode)
+                return (false, null, $"HTTP {(int)chatResp.StatusCode}: {ParseApiError(body, (int)chatResp.StatusCode)}");
+
+            return (true, body, null);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { return (false, null, ex.Message); }
+    }
+
     // ── Shop Orders ──────────────────────────────────────────────
 
     public async Task<ProductOptionsResponse?> GetProductOptionsAsync(string productId, CancellationToken ct)

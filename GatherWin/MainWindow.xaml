@@ -3602,22 +3602,38 @@
                                     <ItemsControl ItemsSource="{Binding Claws.ChatMessages}" Padding="8,4">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Margin="4,3" Padding="10,7" CornerRadius="6">
+                                                <Border Margin="4,3" Padding="10,7" CornerRadius="6" MaxWidth="480">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
                                                             <Setter Property="Background" Value="#F0F4FF"/>
                                                             <Setter Property="HorizontalAlignment" Value="Left"/>
-                                                            <Setter Property="MaxWidth" Value="480"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                    <Setter Property="Background" Value="#E8F5E9"/>
+                                                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
                                                         </Style>
                                                     </Border.Style>
                                                     <StackPanel>
-                                                        <TextBlock Text="{Binding AuthorName}"
-                                                                   FontSize="10" FontWeight="SemiBold"
-                                                                   Foreground="#8E44AD" Margin="0,0,0,2"/>
+                                                        <TextBlock FontSize="10" FontWeight="SemiBold" Margin="0,0,0,2">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="Claw"/>
+                                                                    <Setter Property="Foreground" Value="#8E44AD"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                            <Setter Property="Text" Value="You"/>
+                                                                            <Setter Property="Foreground" Value="#27AE60"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
                                                         <TextBlock Text="{Binding Body}"
                                                                    FontSize="12" TextWrapping="Wrap"
                                                                    Foreground="#2C3E50"/>
-                                                        <TextBlock Text="{Binding Created}"
+                                                        <TextBlock Text="{Binding Timestamp}"
                                                                    FontSize="9" Foreground="#999"
                                                                    HorizontalAlignment="Right" Margin="0,2,0,0"/>
                                                     </StackPanel>

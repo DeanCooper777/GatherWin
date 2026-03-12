@@ -710,14 +710,7 @@ public partial class MainViewModel : ObservableObject
             }
             Channels.AddMessage(e.ChannelId, e.ChannelName, e.MessageId, e.Author, e.Body,
                 e.Timestamp, isNew, e.ReplyTo);
-            Claws.OnNewChannelMessage(e.ChannelId, new Models.ChannelMessage
-            {
-                Id = e.MessageId,
-                AuthorName = e.Author,
-                Body = e.Body,
-                Created = e.Timestamp.ToString("o")
-            });
-            AddToAllActivity(new ActivityItem
+AddToAllActivity(new ActivityItem
             {
                 Type = ActivityType.Channel,
                 Id = e.MessageId,

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,7 +11,7 @@ namespace GatherWin.ViewModels;
 public partial class ClawsViewModel : ObservableObject
 {
     private readonly GatherApiClient _api;
-    private readonly Dictionary<string, string> _clawChannelMap = new(); // clawId → channelId
+    private readonly Dictionary<string, string> _conversationIds = new(); // clawId → conversationId
 
     public ObservableCollection<ClawItem> Claws { get; } = new();
 
@@ -37,9 +38,8 @@ public partial class ClawsViewModel : ObservableObject
 
     // ── Claw Chat ─────────────────────────────────────────────────
 
-    public ObservableCollection<ChannelMessage> ChatMessages { get; } = new();
+    public ObservableCollection<ClawChatMessage> ChatMessages { get; } = new();
 
-    [ObservableProperty] private string _chatChannelId = string.Empty;
     [ObservableProperty] private string _chatInput = string.Empty;
     [ObservableProperty] private bool _isChatLoading;
     [ObservableProperty] private bool _isSendingChat;
@@ -52,14 +52,10 @@ public partial class ClawsViewModel : ObservableObject
 
     partial void OnSelectedClawChanged(ClawItem? value)
     {
-        if (value is null)
-        {
-            ChatMessages.Clear();
-            ChatChannelId = string.Empty;
-            ChatError = null;
-            return;
-        }
-        _ = LoadClawChatAsync(value, CancellationToken.None);
+        ChatMessages.Clear();
+        ChatError = null;
+        if (value is null) return;
+        AppLogger.Log("ClawChat", $"Selected claw: {value.Name}, url={value.Url}");
     }
 
     // ── Claw list ─────────────────────────────────────────────────
@@ -177,112 +173,54 @@ public partial class ClawsViewModel : ObservableObject
 
     // ── Chat ──────────────────────────────────────────────────────
 
-    private async Task LoadClawChatAsync(ClawItem claw, CancellationToken ct)
-    {
-        IsChatLoading = true;
-        ChatError = null;
-        Application.Current.Dispatcher.Invoke(ChatMessages.Clear);
-        ChatChannelId = string.Empty;
-
-        try
-        {
-            // If the list endpoint didn't include agent_id, fetch the detail
-            if (string.IsNullOrEmpty(claw.AgentId) && claw.Id is not null)
-            {
-                AppLogger.Log("ClawChat", $"Fetching detail for claw {claw.Id} to get agent_id");
-                var detail = await _api.GetClawDetailAsync(claw.Id, ct, PbToken.Trim());
-                if (detail?.AgentId is not null)
-                    claw = detail;
-            }
-
-            if (string.IsNullOrEmpty(claw.AgentId))
-            {
-                ChatError = "This claw has no agent ID — it may still be provisioning";
-                return;
-            }
-
-            if (!_clawChannelMap.TryGetValue(claw.Id!, out var channelId))
-            {
-                channelId = await FindOrCreateClawChannelAsync(claw, ct);
-                if (channelId is null) return;
-                _clawChannelMap[claw.Id!] = channelId;
-            }
-
-            ChatChannelId = channelId;
-            await RefreshChatMessagesAsync(channelId, ct);
-        }
-        catch (Exception ex)
-        {
-            ChatError = ex.Message;
-            AppLogger.LogError("ClawChat: load failed", ex);
-        }
-        finally { IsChatLoading = false; }
-    }
-
-    private async Task<string?> FindOrCreateClawChannelAsync(ClawItem claw, CancellationToken ct)
-    {
-        var channelName = $"Claw: {claw.Name}";
-
-        // Look for an existing channel with this name
-        var list = await _api.GetChannelsAsync(ct);
-        var existing = list?.Channels?.FirstOrDefault(c => c.Name == channelName);
-        if (existing?.Id is not null)
-        {
-            AppLogger.Log("ClawChat", $"Found existing channel '{channelName}' ({existing.Id})");
-            return existing.Id;
-        }
-
-        // Create a new private channel
-        var (ok, channelId, err) = await _api.CreateChannelAsync(
-            channelName, $"Chat with claw {claw.Name}", ct);
-
-        if (!ok || channelId is null)
-        {
-            ChatError = err ?? "Failed to create chat channel";
-            return null;
-        }
-
-        AppLogger.Log("ClawChat", $"Created channel '{channelName}' ({channelId})");
-
-        // Invite the claw's agent
-        var (inviteOk, inviteErr) = await _api.InviteToChannelAsync(channelId, claw.AgentId!, ct);
-        if (!inviteOk)
-            AppLogger.LogError($"ClawChat: invite failed — {inviteErr}", null);
-
-        return channelId;
-    }
-
-    private async Task RefreshChatMessagesAsync(string channelId, CancellationToken ct)
-    {
-        var msgs = await _api.GetChannelMessagesAsync(channelId, null, ct);
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            ChatMessages.Clear();
-            if (msgs?.Messages is not null)
-                foreach (var m in msgs.Messages)
-                    ChatMessages.Add(m);
-        });
-        AppLogger.Log("ClawChat", $"Loaded {msgs?.Messages?.Count ?? 0} messages from {channelId}");
-    }
-
     [RelayCommand]
     private async Task SendClawMessageAsync(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(ChatInput) || string.IsNullOrWhiteSpace(ChatChannelId))
+        if (string.IsNullOrWhiteSpace(ChatInput)) return;
+        if (SelectedClaw?.Url is null)
+        {
+            ChatError = "No claw selected";
             return;
+        }
+        if (string.IsNullOrWhiteSpace(PbToken))
+        {
+            ChatError = "Session token required";
+            return;
+        }
 
         var msg = ChatInput.Trim();
         ChatInput = string.Empty;
         IsSendingChat = true;
         ChatError = null;
 
+        // Add user message to display immediately
+        Application.Current.Dispatcher.Invoke(() =>
+            ChatMessages.Add(new ClawChatMessage { Role = "user", Body = msg }));
+
         try
         {
-            var (ok, err) = await _api.PostChannelMessageAsync(ChatChannelId, msg, ct);
+            _conversationIds.TryGetValue(SelectedClaw.Id!, out var convId);
+
+            var (ok, responseBody, err) = await _api.SendClawChatAsync(
+                SelectedClaw.Url, msg, convId, PbToken.Trim(), ct);
+
             if (!ok)
-                ChatError = err ?? "Failed to send message";
+            {
+                ChatError = err;
+                return;
+            }
+
+            // Parse the response to extract the assistant reply and conversation_id
+            var (reply, newConvId) = ParseClawChatResponse(responseBody!);
+
+            if (newConvId is not null)
+                _conversationIds[SelectedClaw.Id!] = newConvId;
+
+            if (reply is not null)
+                Application.Current.Dispatcher.Invoke(() =>
+                    ChatMessages.Add(new ClawChatMessage { Role = "assistant", Body = reply }));
             else
-                await RefreshChatMessagesAsync(ChatChannelId, ct);
+                AppLogger.Log("ClawChat", $"Could not parse reply from: {responseBody}");
         }
         catch (Exception ex)
         {
@@ -292,16 +230,48 @@ public partial class ClawsViewModel : ObservableObject
         finally { IsSendingChat = false; }
     }
 
-    /// <summary>Called by MainViewModel when a channel message arrives for the active chat channel.</summary>
-    public void OnNewChannelMessage(string channelId, ChannelMessage message)
+    private static (string? Reply, string? ConversationId) ParseClawChatResponse(string json)
     {
-        if (channelId != ChatChannelId) return;
-        Application.Current.Dispatcher.Invoke(() =>
+        try
         {
-            // Dedup by ID
-            if (message.Id is not null && ChatMessages.Any(m => m.Id == message.Id)) return;
-            ChatMessages.Add(message);
-        });
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            string? reply = null;
+            string? convId = null;
+
+            // Try common response shapes
+            if (root.TryGetProperty("message", out var msgProp))
+                reply = msgProp.GetString();
+            else if (root.TryGetProperty("content", out var contentProp))
+                reply = contentProp.GetString();
+            else if (root.TryGetProperty("response", out var respProp))
+                reply = respProp.GetString();
+            else if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
+            {
+                // OpenAI-style response
+                var first = choices.EnumerateArray().FirstOrDefault();
+                if (first.TryGetProperty("message", out var choiceMsg) &&
+                    choiceMsg.TryGetProperty("content", out var choiceContent))
+                    reply = choiceContent.GetString();
+            }
+            else if (root.TryGetProperty("messages", out var msgs) && msgs.ValueKind == JsonValueKind.Array)
+            {
+                // Last assistant message in messages array
+                foreach (var m in msgs.EnumerateArray())
+                {
+                    if (m.TryGetProperty("role", out var roleProp) && roleProp.GetString() == "assistant" &&
+                        m.TryGetProperty("content", out var c))
+                        reply = c.GetString();
+                }
+            }
+
+            if (root.TryGetProperty("conversation_id", out var cidProp))
+                convId = cidProp.GetString();
+
+            return (reply, convId);
+        }
+        catch { return (null, null); }
     }
 
     // ── Helpers ───────────────────────────────────────────────────
