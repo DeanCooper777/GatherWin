@@ -179,12 +179,6 @@ public partial class ClawsViewModel : ObservableObject
 
     private async Task LoadClawChatAsync(ClawItem claw, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(claw.AgentId))
-        {
-            ChatError = "This claw has no agent ID — cannot open chat";
-            return;
-        }
-
         IsChatLoading = true;
         ChatError = null;
         Application.Current.Dispatcher.Invoke(ChatMessages.Clear);
@@ -192,6 +186,21 @@ public partial class ClawsViewModel : ObservableObject
 
         try
         {
+            // If the list endpoint didn't include agent_id, fetch the detail
+            if (string.IsNullOrEmpty(claw.AgentId) && claw.Id is not null)
+            {
+                AppLogger.Log("ClawChat", $"Fetching detail for claw {claw.Id} to get agent_id");
+                var detail = await _api.GetClawDetailAsync(claw.Id, ct, PbToken.Trim());
+                if (detail?.AgentId is not null)
+                    claw = detail;
+            }
+
+            if (string.IsNullOrEmpty(claw.AgentId))
+            {
+                ChatError = "This claw has no agent ID — it may still be provisioning";
+                return;
+            }
+
             if (!_clawChannelMap.TryGetValue(claw.Id!, out var channelId))
             {
                 channelId = await FindOrCreateClawChannelAsync(claw, ct);
