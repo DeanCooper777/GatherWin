@@ -3636,9 +3636,14 @@
                                                                 </Style>
                                                             </TextBlock.Style>
                                                         </TextBlock>
-                                                        <TextBlock Text="{Binding Body}"
-                                                                   FontSize="12" TextWrapping="Wrap"
-                                                                   Foreground="#2C3E50"/>
+                                                        <TextBox Text="{Binding Body, Mode=OneWay}"
+                                                                 FontSize="12" TextWrapping="Wrap"
+                                                                 Foreground="#2C3E50"
+                                                                 IsReadOnly="True"
+                                                                 BorderThickness="0"
+                                                                 Background="Transparent"
+                                                                 Padding="0"
+                                                                 SelectionBrush="#B39DDB"/>
                                                         <TextBlock Text="{Binding Timestamp}"
                                                                    FontSize="9" Foreground="#999"
                                                                    HorizontalAlignment="Right" Margin="0,2,0,0"/>
