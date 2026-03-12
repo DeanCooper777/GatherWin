@@ -1002,12 +1002,13 @@ public class GatherApiClient
             };
             using var client = new HttpClient(handler);
 
-            // 1. Authenticate: call session bridge so the claw subdomain trusts us
-            var bridgeUrl = $"{GatherBaseUrl}/api/auth/session-bridge?redirect={Uri.EscapeDataString(clawUrl + "/")}";
-            using var bridgeReq = new HttpRequestMessage(HttpMethod.Get, bridgeUrl);
-            bridgeReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
-            var bridgeResp = await client.SendAsync(bridgeReq, ct);
-            AppLogger.Log("ClawChat", $"Session bridge → HTTP {(int)bridgeResp.StatusCode}");
+            // 1. Authenticate: POST to the claw's set-session endpoint with the PocketBase token.
+            //    This sets a session cookie for the claw's subdomain (mirrors what the browser JS does).
+            using var authReq = new HttpRequestMessage(HttpMethod.Post, $"{clawUrl}/api/auth/set-session");
+            authReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
+            authReq.Content = new StringContent(string.Empty);
+            var authResp = await client.SendAsync(authReq, ct);
+            AppLogger.Log("ClawChat", $"set-session → HTTP {(int)authResp.StatusCode}");
 
             // 2. POST message to /api/chat
             var payload = new Dictionary<string, object?>
