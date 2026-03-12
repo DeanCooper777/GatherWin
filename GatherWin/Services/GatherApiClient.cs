@@ -1008,74 +1008,118 @@ public class GatherApiClient
         };
 
         var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        AppLogger.Log("ClawChat", $"POST stream HTTP {(int)response.StatusCode}");
+        AppLogger.Log("ClawStream", $"POST /messages/stream → HTTP {(int)response.StatusCode}");
 
         if (!response.IsSuccessStatusCode)
         {
             var errBody = await response.Content.ReadAsStringAsync(ct);
-            AppLogger.Log("ClawChat", $"Stream error: {errBody}");
+            AppLogger.Log("ClawStream", $"Error response: {errBody}");
             return (false, null, ParseApiError(errBody, (int)response.StatusCode));
         }
 
         using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var reader = new System.IO.StreamReader(stream);
         var reply = new System.Text.StringBuilder();
+        int textChunks = 0, toolCalls = 0, toolResults = 0;
+        bool gotEnd = false, gotDone = false;
 
-        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        try
         {
-            var line = await reader.ReadLineAsync(ct);
-            if (line is null) break;
-            AppLogger.Log("ClawStream", line);
-            if (!line.StartsWith("data:")) continue;
-            var data = line["data:".Length..].Trim();
-            if (data == "[DONE]") break;
-            if (string.IsNullOrEmpty(data)) continue;
-
-            try
+            while (!reader.EndOfStream && !ct.IsCancellationRequested)
             {
-                using var doc = JsonDocument.Parse(data);
-                var root = doc.RootElement;
-                var eventType = root.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
+                var line = await reader.ReadLineAsync(ct);
+                if (line is null) break;
+                if (!string.IsNullOrWhiteSpace(line))
+                    AppLogger.Log("ClawStream", line);
+                if (!line.StartsWith("data:")) continue;
+                var data = line["data:".Length..].Trim();
+                if (data == "[DONE]") { gotDone = true; break; }
+                if (string.IsNullOrEmpty(data)) continue;
 
-                if (eventType == "end")
+                try
                 {
-                    // "end" contains the final complete reply — replace accumulated text
-                    if (root.TryGetProperty("text", out var endTextEl))
+                    using var doc = JsonDocument.Parse(data);
+                    var root = doc.RootElement;
+                    var eventType = root.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
+
+                    if (eventType == "end")
                     {
-                        var finalText = endTextEl.GetString() ?? string.Empty;
-                        if (finalText.Length > 0)
+                        gotEnd = true;
+                        if (root.TryGetProperty("text", out var endTextEl))
                         {
-                            reply.Clear();
-                            reply.Append(finalText);
-                            onFinalReply?.Invoke(finalText);
+                            var finalText = endTextEl.GetString() ?? string.Empty;
+                            if (finalText.Length > 0)
+                            {
+                                reply.Clear();
+                                reply.Append(finalText);
+                                onFinalReply?.Invoke(finalText);
+                            }
+                        }
+                        AppLogger.Log("ClawStream", $"[end] final reply length={reply.Length}");
+                    }
+                    else if (eventType == "done")
+                    {
+                        gotDone = true;
+                        var msgId = root.TryGetProperty("message_id", out var mid) ? mid.GetString() : "?";
+                        AppLogger.Log("ClawStream", $"[done] message_id={msgId}");
+                    }
+                    else if (eventType == "tool_call")
+                    {
+                        toolCalls++;
+                        var toolName = root.TryGetProperty("tool_name", out var tn) ? tn.GetString() : "unknown";
+                        AppLogger.Log("ClawStream", $"[tool_call #{toolCalls}] {toolName}");
+                    }
+                    else if (eventType == "tool_result")
+                    {
+                        toolResults++;
+                        AppLogger.Log("ClawStream", $"[tool_result #{toolResults}]");
+                    }
+                    else if (eventType == "error")
+                    {
+                        var errMsg = root.TryGetProperty("error", out var em) ? em.GetString()
+                            : root.TryGetProperty("message", out var emm) ? emm.GetString() : data;
+                        AppLogger.Log("ClawStream", $"[error] {errMsg}");
+                        return (false, null, $"Claw error: {errMsg}");
+                    }
+                    else
+                    {
+                        // "text" streaming chunk or unknown format
+                        string? chunk = null;
+                        if (root.TryGetProperty("text", out var t)) chunk = t.GetString();
+                        else if (root.TryGetProperty("content", out var c)) chunk = c.GetString();
+                        else if (root.TryGetProperty("delta", out var d))
+                        {
+                            if (d.TryGetProperty("text", out var dt)) chunk = dt.GetString();
+                            else if (d.TryGetProperty("content", out var dc)) chunk = dc.GetString();
+                        }
+                        if (!string.IsNullOrEmpty(chunk))
+                        {
+                            textChunks++;
+                            reply.Append(chunk);
+                            onChunk(chunk);
                         }
                     }
                 }
-                else if (eventType is "done" or "tool_call" or "tool_result" or "error")
-                {
-                    // metadata/tool events — not part of the reply text
-                }
-                else
-                {
-                    // "text" streaming chunk or unknown format
-                    string? chunk = null;
-                    if (root.TryGetProperty("text", out var t)) chunk = t.GetString();
-                    else if (root.TryGetProperty("content", out var c)) chunk = c.GetString();
-                    else if (root.TryGetProperty("delta", out var d))
-                    {
-                        if (d.TryGetProperty("text", out var dt)) chunk = dt.GetString();
-                        else if (d.TryGetProperty("content", out var dc)) chunk = dc.GetString();
-                    }
-                    if (!string.IsNullOrEmpty(chunk))
-                    {
-                        reply.Append(chunk);
-                        onChunk(chunk);
-                    }
-                }
+                catch { /* non-JSON line, skip */ }
             }
-            catch { /* non-JSON line, skip */ }
+        }
+        catch (Exception ex) when (
+            (ex is System.Net.Http.HttpRequestException hre && hre.HttpRequestError == System.Net.Http.HttpRequestError.ResponseEnded) ||
+            ex is System.IO.IOException ||
+            (ex is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            AppLogger.Log("ClawStream", $"Stream cut off ({ex.GetType().Name}: {ex.Message}) — chunks={textChunks} tools={toolCalls}/{toolResults} gotEnd={gotEnd}");
+            var partial = reply.ToString();
+            if (partial.Length > 0)
+            {
+                // Return what we have with a note
+                onFinalReply?.Invoke(partial);
+                return (true, partial, null);
+            }
+            return (false, null, "Stream dropped before the claw replied — it may still be processing. Try 'keep going' or 'continue'.");
         }
 
+        AppLogger.Log("ClawStream", $"Stream complete — chunks={textChunks} tools={toolCalls}/{toolResults} gotEnd={gotEnd} gotDone={gotDone} replyLen={reply.Length}");
         return (true, reply.ToString(), null);
     }
 

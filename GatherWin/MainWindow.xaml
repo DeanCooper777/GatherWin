@@ -3683,98 +3683,149 @@
                                     <!-- ── Chat panel ── -->
                                     <Grid Visibility="{Binding Claws.IsClawPanelChat, Converter={StaticResource BoolToVis}}">
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="*"/>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="2*" MinHeight="120"/>
+                                            <RowDefinition Height="5"/>
+                                            <RowDefinition Height="160" MinHeight="60"/>
                                         </Grid.RowDefinitions>
 
-                                        <!-- Messages -->
-                                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
-                                                      x:Name="ClawChatScroller">
-                                            <ItemsControl ItemsSource="{Binding Claws.ChatMessages}" Padding="8,4">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Margin="4,3" Padding="10,7" CornerRadius="6" MaxWidth="480">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Setter Property="Background" Value="#F0F4FF"/>
-                                                                    <Setter Property="HorizontalAlignment" Value="Left"/>
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                                            <Setter Property="Background" Value="#E8F5E9"/>
-                                                                            <Setter Property="HorizontalAlignment" Value="Right"/>
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Border.Style>
-                                                            <StackPanel>
-                                                                <TextBlock FontSize="10" FontWeight="SemiBold" Margin="0,0,0,2">
-                                                                    <TextBlock.Style>
-                                                                        <Style TargetType="TextBlock">
-                                                                            <Setter Property="Text" Value="Claw"/>
-                                                                            <Setter Property="Foreground" Value="#8E44AD"/>
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                                                    <Setter Property="Text" Value="You"/>
-                                                                                    <Setter Property="Foreground" Value="#27AE60"/>
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </TextBlock.Style>
-                                                                </TextBlock>
-                                                                <TextBox Text="{Binding Body, Mode=OneWay}"
-                                                                         FontSize="12" TextWrapping="Wrap"
-                                                                         Foreground="#2C3E50"
-                                                                         IsReadOnly="True"
-                                                                         BorderThickness="0"
-                                                                         Background="Transparent"
-                                                                         Padding="0"
-                                                                         SelectionBrush="#B39DDB"/>
-                                                                <TextBlock Text="{Binding Timestamp}"
-                                                                           FontSize="9" Foreground="#999"
-                                                                           HorizontalAlignment="Right" Margin="0,2,0,0"/>
-                                                            </StackPanel>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </ScrollViewer>
+                                        <!-- Top: messages + error bar + input -->
+                                        <Grid Grid.Row="0">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
 
-                                        <!-- Chat error bar -->
-                                        <Border Grid.Row="1" Background="#FDECEA" Padding="8,4"
-                                                Visibility="{Binding Claws.ChatError, Converter={StaticResource NotNullToVis}}">
-                                            <TextBlock Text="{Binding Claws.ChatError}"
-                                                       FontSize="11" Foreground="#C0392B" TextWrapping="Wrap"/>
-                                        </Border>
+                                            <!-- Messages -->
+                                            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                                                          x:Name="ClawChatScroller">
+                                                <ItemsControl ItemsSource="{Binding Claws.ChatMessages}" Padding="8,4">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="4,3" Padding="10,7" CornerRadius="6" MaxWidth="480">
+                                                                <Border.Style>
+                                                                    <Style TargetType="Border">
+                                                                        <Setter Property="Background" Value="#F0F4FF"/>
+                                                                        <Setter Property="HorizontalAlignment" Value="Left"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                                <Setter Property="Background" Value="#E8F5E9"/>
+                                                                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
+                                                                <StackPanel>
+                                                                    <TextBlock FontSize="10" FontWeight="SemiBold" Margin="0,0,0,2">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Setter Property="Text" Value="Claw"/>
+                                                                                <Setter Property="Foreground" Value="#8E44AD"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                                        <Setter Property="Text" Value="You"/>
+                                                                                        <Setter Property="Foreground" Value="#27AE60"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
+                                                                    <TextBox Text="{Binding Body, Mode=OneWay}"
+                                                                             FontSize="12" TextWrapping="Wrap"
+                                                                             Foreground="#2C3E50"
+                                                                             IsReadOnly="True"
+                                                                             BorderThickness="0"
+                                                                             Background="Transparent"
+                                                                             Padding="0"
+                                                                             SelectionBrush="#B39DDB"/>
+                                                                    <TextBlock Text="{Binding Timestamp}"
+                                                                               FontSize="9" Foreground="#999"
+                                                                               HorizontalAlignment="Right" Margin="0,2,0,0"/>
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
 
-                                        <!-- Input area -->
-                                        <Border Grid.Row="2" Background="#F8F9FA" Padding="8"
-                                                BorderBrush="#DEE2E6" BorderThickness="0,1,0,0">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <TextBox Grid.Column="0"
-                                                         Text="{Binding Claws.ChatInput, UpdateSourceTrigger=PropertyChanged}"
-                                                         FontSize="12" Padding="8,6" BorderBrush="#CCC" BorderThickness="1"
-                                                         VerticalContentAlignment="Center"
-                                                         AcceptsReturn="False" TextWrapping="Wrap"
-                                                         ToolTip="Type a message and press Send">
-                                                    <TextBox.InputBindings>
-                                                        <KeyBinding Key="Return"
-                                                                    Command="{Binding Claws.SendClawMessageCommand}"/>
-                                                    </TextBox.InputBindings>
-                                                </TextBox>
-                                                <Button Grid.Column="1" Content="Send"
-                                                        Command="{Binding Claws.SendClawMessageCommand}"
-                                                        Background="#8E44AD" Foreground="White"
-                                                        Padding="14,6" Margin="6,0,0,0"
-                                                        FontSize="12" FontWeight="SemiBold" BorderThickness="0"
-                                                        Cursor="Hand"
-                                                        IsEnabled="{Binding Claws.IsSendingChat, Converter={StaticResource InverseBool}}"/>
-                                            </Grid>
-                                        </Border>
+                                            <!-- Chat error bar -->
+                                            <Border Grid.Row="1" Background="#FDECEA" Padding="8,4"
+                                                    Visibility="{Binding Claws.ChatError, Converter={StaticResource NotNullToVis}}">
+                                                <TextBlock Text="{Binding Claws.ChatError}"
+                                                           FontSize="11" Foreground="#C0392B" TextWrapping="Wrap"/>
+                                            </Border>
+
+                                            <!-- Input area -->
+                                            <Border Grid.Row="2" Background="#F8F9FA" Padding="8"
+                                                    BorderBrush="#DEE2E6" BorderThickness="0,1,0,0">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox Grid.Column="0"
+                                                             Text="{Binding Claws.ChatInput, UpdateSourceTrigger=PropertyChanged}"
+                                                             FontSize="12" Padding="8,6" BorderBrush="#CCC" BorderThickness="1"
+                                                             VerticalContentAlignment="Center"
+                                                             AcceptsReturn="False" TextWrapping="Wrap"
+                                                             ToolTip="Type a message and press Send">
+                                                        <TextBox.InputBindings>
+                                                            <KeyBinding Key="Return"
+                                                                        Command="{Binding Claws.SendClawMessageCommand}"/>
+                                                        </TextBox.InputBindings>
+                                                    </TextBox>
+                                                    <Button Grid.Column="1" Content="Send"
+                                                            Command="{Binding Claws.SendClawMessageCommand}"
+                                                            Background="#8E44AD" Foreground="White"
+                                                            Padding="14,6" Margin="6,0,0,0"
+                                                            FontSize="12" FontWeight="SemiBold" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            IsEnabled="{Binding Claws.IsSendingChat, Converter={StaticResource InverseBool}}"/>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Splitter -->
+                                        <GridSplitter Grid.Row="1" Height="5"
+                                                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                                      Background="#DEE2E6" ResizeDirection="Rows"
+                                                      ResizeBehavior="PreviousAndNext" Cursor="SizeNS"/>
+
+                                        <!-- Inline logs pane -->
+                                        <Grid Grid.Row="2">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+                                            <Border Grid.Row="0" Background="#252526" Padding="6,4"
+                                                    BorderBrush="#1A1A1A" BorderThickness="0,1,0,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="CLAW LOGS" FontSize="10" FontWeight="Bold"
+                                                               Foreground="#858585" VerticalAlignment="Center"
+                                                               Margin="0,0,10,0" FontFamily="Consolas"/>
+                                                    <Button Content="Refresh"
+                                                            Command="{Binding Claws.RefreshLogsCommand}"
+                                                            IsEnabled="{Binding Claws.IsLoadingLogs, Converter={StaticResource InverseBool}}"
+                                                            Background="#3C3C3C" Foreground="#CCCCCC"
+                                                            Padding="6,2" FontSize="10" BorderThickness="0" Cursor="Hand"/>
+                                                    <TextBlock Text="Loading…" FontSize="10" Foreground="#666"
+                                                               VerticalAlignment="Center" Margin="8,0,0,0"
+                                                               FontFamily="Consolas"
+                                                               Visibility="{Binding Claws.IsLoadingLogs, Converter={StaticResource BoolToVis}}"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                                          HorizontalScrollBarVisibility="Auto"
+                                                          x:Name="ClawLogScroller"
+                                                          Background="#1E1E1E">
+                                                <TextBox Text="{Binding Claws.LogsText, Mode=OneWay}"
+                                                         FontFamily="Consolas" FontSize="10"
+                                                         IsReadOnly="True" TextWrapping="NoWrap"
+                                                         BorderThickness="0" Background="Transparent"
+                                                         Foreground="#ABB2BF" Padding="6,4"
+                                                         SelectionBrush="#264F78"/>
+                                            </ScrollViewer>
+                                        </Grid>
                                     </Grid>
 
                                     <!-- ── Settings panel ── -->

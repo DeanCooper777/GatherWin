@@ -471,36 +471,26 @@ public partial class ClawsViewModel : ObservableObject
             });
 
             var replyText = new System.Text.StringBuilder();
+
+            void UpdateBubble(string body) => Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (replyIdx >= 0 && replyIdx < ChatMessages.Count)
+                    ChatMessages[replyIdx] = new ClawChatMessage
+                    {
+                        Role = "assistant",
+                        Body = body,
+                        Timestamp = DateTime.Now.ToString("HH:mm:ss")
+                    };
+            });
+
             var (ok, _, err) = await _api.PostClawMessageStreamAsync(
                 SelectedClaw.Id, msg, PbToken.Trim(),
                 chunk =>
                 {
                     replyText.Append(chunk);
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        if (replyIdx >= 0 && replyIdx < ChatMessages.Count)
-                            ChatMessages[replyIdx] = new ClawChatMessage
-                            {
-                                Role = "assistant",
-                                Body = replyText.ToString(),
-                                Timestamp = DateTime.Now.ToString("HH:mm:ss")
-                            };
-                    });
+                    UpdateBubble(replyText.ToString());
                 }, ct,
-                finalText =>
-                {
-                    // "end" event — replace placeholder with the final complete reply
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        if (replyIdx >= 0 && replyIdx < ChatMessages.Count)
-                            ChatMessages[replyIdx] = new ClawChatMessage
-                            {
-                                Role = "assistant",
-                                Body = finalText,
-                                Timestamp = DateTime.Now.ToString("HH:mm:ss")
-                            };
-                    });
-                });
+                finalText => UpdateBubble(finalText));
 
             if (!ok)
             {
@@ -512,12 +502,21 @@ public partial class ClawsViewModel : ObservableObject
                 ChatError = err;
             }
         }
+        catch (OperationCanceledException) { /* user cancelled */ }
         catch (Exception ex)
         {
-            ChatError = ex.Message;
+            var isDropped = ex.Message.Contains("ResponseEnded") || ex is System.IO.IOException;
+            ChatError = isDropped
+                ? "Connection dropped — the claw may still be processing. Try sending 'continue' or 'keep going'."
+                : ex.Message;
             AppLogger.LogError("ClawChat: send failed", ex);
         }
-        finally { IsSendingChat = false; }
+        finally
+        {
+            IsSendingChat = false;
+            // Refresh logs so we can see what the claw was doing
+            _ = RefreshLogsAsync(CancellationToken.None);
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────
