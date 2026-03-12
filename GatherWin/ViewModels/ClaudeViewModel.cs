@@ -256,18 +256,42 @@ public partial class ClaudeViewModel : ObservableObject
     private void SaveAgent()
     {
         if (SelectedAgent is null) return;
-        SelectedAgent.Name        = AgentName.Trim();
-        SelectedAgent.Description = AgentDescription.Trim();
+        SelectedAgent.Name         = AgentName.Trim();
+        SelectedAgent.Description  = AgentDescription.Trim();
         SelectedAgent.SystemPrompt = AgentSystemPrompt.Trim();
-        SelectedAgent.Model       = AgentModel;
+        SelectedAgent.Model        = AgentModel;
         AgentSaveStatus = "Saved";
 
-        // Refresh list so updated name appears
-        var idx = Agents.IndexOf(SelectedAgent);
-        if (idx >= 0) { Agents.RemoveAt(idx); Agents.Insert(idx, SelectedAgent); }
+        // Refresh list so updated name appears — capture ref before removal
+        // (removing an item clears SelectedAgent via the ListBox, so use local var)
+        var agent = SelectedAgent;
+        var idx = Agents.IndexOf(agent);
+        if (idx >= 0) { Agents.RemoveAt(idx); Agents.Insert(idx, agent); }
+        SelectedAgent = agent;  // re-select after re-insert
 
         SaveAgents();
         RefreshStatusText();
+    }
+
+    /// <summary>
+    /// Create a new conversation pre-configured with this agent's system prompt and model,
+    /// then switch to the Chats panel so the user can chat with it directly.
+    /// </summary>
+    [RelayCommand]
+    private void ChatWithAgent()
+    {
+        if (SelectedAgent is null) return;
+        var agent = SelectedAgent;
+        var conv = new ClaudeConversation
+        {
+            Name         = $"Chat: {agent.Name}",
+            Model        = agent.Model,
+            SystemPrompt = agent.SystemPrompt
+        };
+        Conversations.Insert(0, conv);
+        SelectedConversation = conv;
+        LeftPanel = "chats";   // switch to Chats panel so user sees the conversation
+        SaveConversations();
     }
 
     // ── Send message ──────────────────────────────────────────────
