@@ -3344,14 +3344,20 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="{Binding Claws.StatusText}"
                                        FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Content="Deploy Claw"
+                            <Button Grid.Column="1" Content="Web Login"
+                                    Click="ClawsWebLogin_Click"
+                                    Background="#27AE60" Foreground="White" Padding="12,4" Margin="0,0,6,0"
+                                    FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                    ToolTip="Open gather.is in a browser — your session token is auto-detected after login"/>
+                            <Button Grid.Column="2" Content="Deploy Claw"
                                     Command="{Binding Claws.OpenDeployFormCommand}"
                                     Background="#8E44AD" Foreground="White" Padding="12,4" Margin="0,0,6,0"
                                     FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
-                            <Button Grid.Column="2" Content="Refresh"
+                            <Button Grid.Column="3" Content="Refresh"
                                     Command="{Binding Claws.LoadClawsCommand}"
                                     Background="#3498DB" Foreground="White" Padding="12,4"
                                     FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"

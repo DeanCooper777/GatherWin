@@ -686,4 +686,27 @@ public partial class MainWindow : Window
             _viewModel.StatusMessage = "Deposit address copied!";
         }
     }
+
+    // ── Claws Web Login ──────────────────────────────────────────────
+
+    private GatherLoginWindow? _loginWindow;
+
+    private void ClawsWebLogin_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loginWindow is not null && _loginWindow.IsLoaded)
+        {
+            _loginWindow.Activate();
+            return;
+        }
+
+        _loginWindow = new GatherLoginWindow(token =>
+        {
+            _viewModel.Claws.PbToken = token;
+            Dispatcher.Invoke(() =>
+                _viewModel.StatusMessage = "Session token captured from browser login!");
+        })
+        { Owner = this };
+
+        _loginWindow.Show();
+    }
 }
