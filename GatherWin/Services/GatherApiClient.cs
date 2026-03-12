@@ -983,58 +983,34 @@ public class GatherApiClient
 
     // ── Claw Chat ─────────────────────────────────────────────────
 
-    /// <summary>
-    /// Authenticates via the Gather session bridge so the claw subdomain will accept
-    /// our requests, then POSTs a message to the claw's /api/chat endpoint.
-    /// </summary>
-    public async Task<(bool Success, string? ResponseBody, string? Error)> SendClawChatAsync(
-        string clawUrl, string message, string? conversationId, string pbToken, CancellationToken ct)
+    public async Task<string?> GetClawMessagesRawAsync(string clawId, DateTimeOffset? since, string pbToken, CancellationToken ct)
     {
-        try
+        var url = $"/api/claws/{clawId}/messages";
+        if (since.HasValue)
+            url += $"?since={Uri.EscapeDataString(since.Value.ToString("yyyy-MM-dd HH:mm:ss.fffZ"))}";
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{GatherBaseUrl}{url}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
+        var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        AppLogger.Log("ClawChat", $"GET messages HTTP {(int)response.StatusCode}: {body[..Math.Min(body.Length, 500)]}");
+        return body;
+    }
+
+    public async Task<(bool Success, string? Error)> PostClawMessageAsync(string clawId, string message, string pbToken, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, string> { ["message"] = message };
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{GatherBaseUrl}/api/claws/{clawId}/messages")
         {
-            // Use a dedicated handler with cookie support so the session bridge can set
-            // the claw-subdomain session cookie before we send the chat request.
-            var handler = new HttpClientHandler
-            {
-                AllowAutoRedirect = true,
-                UseCookies = true,
-                CookieContainer = new CookieContainer()
-            };
-            using var client = new HttpClient(handler);
-
-            // 1. Authenticate: POST to the claw's set-session endpoint with the PocketBase token.
-            //    This sets a session cookie for the claw's subdomain (mirrors what the browser JS does).
-            using var authReq = new HttpRequestMessage(HttpMethod.Post, $"{clawUrl}/api/auth/set-session");
-            authReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
-            authReq.Content = new StringContent(string.Empty);
-            var authResp = await client.SendAsync(authReq, ct);
-            AppLogger.Log("ClawChat", $"set-session → HTTP {(int)authResp.StatusCode}");
-
-            // 2. POST message to /api/chat
-            var payload = new Dictionary<string, object?>
-            {
-                ["messages"] = new[] { new Dictionary<string, string> { ["role"] = "user", ["content"] = message } }
-            };
-            if (!string.IsNullOrEmpty(conversationId))
-                payload["conversation_id"] = conversationId;
-
-            using var chatReq = new HttpRequestMessage(HttpMethod.Post, $"{clawUrl}/api/chat")
-            {
-                Content = JsonContent.Create(payload, options: _jsonOpts)
-            };
-            chatReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", pbToken);
-
-            var chatResp = await client.SendAsync(chatReq, ct);
-            var body = await chatResp.Content.ReadAsStringAsync(ct);
-            AppLogger.Log("ClawChat", $"Chat HTTP {(int)chatResp.StatusCode}: {body[..Math.Min(body.Length, 300)]}");
-
-            if (!chatResp.IsSuccessStatusCode)
-                return (false, null, $"HTTP {(int)chatResp.StatusCode}: {ParseApiError(body, (int)chatResp.StatusCode)}");
-
-            return (true, body, null);
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex) { return (false, null, ex.Message); }
+            Headers = { Authorization = new AuthenticationHeaderValue("Bearer", pbToken) },
+            Content = JsonContent.Create(payload, options: _jsonOpts)
+        };
+        var response = await _http.SendAsync(request, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        AppLogger.Log("ClawChat", $"POST message HTTP {(int)response.StatusCode}: {body[..Math.Min(body.Length, 300)]}");
+        if (!response.IsSuccessStatusCode)
+            return (false, ParseApiError(body, (int)response.StatusCode));
+        return (true, null);
     }
 
     // ── Shop Orders ──────────────────────────────────────────────

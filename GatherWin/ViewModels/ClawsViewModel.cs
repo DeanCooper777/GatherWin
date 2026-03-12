@@ -11,7 +11,7 @@ namespace GatherWin.ViewModels;
 public partial class ClawsViewModel : ObservableObject
 {
     private readonly GatherApiClient _api;
-    private readonly Dictionary<string, string> _conversationIds = new(); // clawId → conversationId
+    private DateTimeOffset? _lastMessageTime;
 
     public ObservableCollection<ClawItem> Claws { get; } = new();
 
@@ -54,8 +54,9 @@ public partial class ClawsViewModel : ObservableObject
     {
         ChatMessages.Clear();
         ChatError = null;
+        _lastMessageTime = null;
         if (value is null) return;
-        AppLogger.Log("ClawChat", $"Selected claw: {value.Name}, url={value.Url}");
+        _ = LoadClawMessagesAsync(value, since: null, CancellationToken.None);
     }
 
     // ── Claw list ─────────────────────────────────────────────────
@@ -173,54 +174,90 @@ public partial class ClawsViewModel : ObservableObject
 
     // ── Chat ──────────────────────────────────────────────────────
 
+    private async Task LoadClawMessagesAsync(ClawItem claw, DateTimeOffset? since, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(PbToken)) return;
+        if (claw.Id is null) return;
+
+        IsChatLoading = true;
+        try
+        {
+            var raw = await _api.GetClawMessagesRawAsync(claw.Id, since, PbToken.Trim(), ct);
+            if (raw is null) return;
+            AppendClawMessages(raw, clearFirst: since is null);
+        }
+        catch (Exception ex) { AppLogger.LogError("ClawChat: load failed", ex); }
+        finally { IsChatLoading = false; }
+    }
+
+    private void AppendClawMessages(string json, bool clearFirst)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Find the messages array — could be root array, or root.messages, or root.data
+            JsonElement arr = default;
+            if (root.ValueKind == JsonValueKind.Array)
+                arr = root;
+            else if (root.TryGetProperty("messages", out var m))
+                arr = m;
+            else if (root.TryGetProperty("data", out var d))
+                arr = d;
+
+            if (arr.ValueKind != JsonValueKind.Array) return;
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (clearFirst) ChatMessages.Clear();
+                foreach (var item in arr.EnumerateArray())
+                {
+                    var role = TryGetString(item, "role") ?? "user";
+                    var body = TryGetString(item, "message") ?? TryGetString(item, "content")
+                               ?? TryGetString(item, "body") ?? string.Empty;
+                    var created = TryGetString(item, "created") ?? TryGetString(item, "timestamp") ?? string.Empty;
+
+                    if (string.IsNullOrEmpty(body)) continue;
+
+                    ChatMessages.Add(new ClawChatMessage { Role = role, Body = body, Timestamp = created });
+
+                    if (!string.IsNullOrEmpty(created) &&
+                        DateTimeOffset.TryParse(created, out var ts) &&
+                        (_lastMessageTime is null || ts > _lastMessageTime))
+                        _lastMessageTime = ts;
+                }
+            });
+        }
+        catch (Exception ex) { AppLogger.LogError("ClawChat: parse failed", ex); }
+    }
+
+    private static string? TryGetString(JsonElement el, string name) =>
+        el.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+
     [RelayCommand]
     private async Task SendClawMessageAsync(CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(ChatInput)) return;
-        if (SelectedClaw?.Url is null)
-        {
-            ChatError = "No claw selected";
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(PbToken))
-        {
-            ChatError = "Session token required";
-            return;
-        }
+        if (SelectedClaw?.Id is null) { ChatError = "No claw selected"; return; }
+        if (string.IsNullOrWhiteSpace(PbToken)) { ChatError = "Session token required"; return; }
 
         var msg = ChatInput.Trim();
         ChatInput = string.Empty;
         IsSendingChat = true;
         ChatError = null;
 
-        // Add user message to display immediately
         Application.Current.Dispatcher.Invoke(() =>
             ChatMessages.Add(new ClawChatMessage { Role = "user", Body = msg }));
 
         try
         {
-            _conversationIds.TryGetValue(SelectedClaw.Id!, out var convId);
+            var (ok, err) = await _api.PostClawMessageAsync(SelectedClaw.Id, msg, PbToken.Trim(), ct);
+            if (!ok) { ChatError = err; return; }
 
-            var (ok, responseBody, err) = await _api.SendClawChatAsync(
-                SelectedClaw.Url, msg, convId, PbToken.Trim(), ct);
-
-            if (!ok)
-            {
-                ChatError = err;
-                return;
-            }
-
-            // Parse the response to extract the assistant reply and conversation_id
-            var (reply, newConvId) = ParseClawChatResponse(responseBody!);
-
-            if (newConvId is not null)
-                _conversationIds[SelectedClaw.Id!] = newConvId;
-
-            if (reply is not null)
-                Application.Current.Dispatcher.Invoke(() =>
-                    ChatMessages.Add(new ClawChatMessage { Role = "assistant", Body = reply }));
-            else
-                AppLogger.Log("ClawChat", $"Could not parse reply from: {responseBody}");
+            // Poll for the reply
+            await Task.Delay(1500, ct);
+            await LoadClawMessagesAsync(SelectedClaw, _lastMessageTime, ct);
         }
         catch (Exception ex)
         {
@@ -228,50 +265,6 @@ public partial class ClawsViewModel : ObservableObject
             AppLogger.LogError("ClawChat: send failed", ex);
         }
         finally { IsSendingChat = false; }
-    }
-
-    private static (string? Reply, string? ConversationId) ParseClawChatResponse(string json)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            string? reply = null;
-            string? convId = null;
-
-            // Try common response shapes
-            if (root.TryGetProperty("message", out var msgProp))
-                reply = msgProp.GetString();
-            else if (root.TryGetProperty("content", out var contentProp))
-                reply = contentProp.GetString();
-            else if (root.TryGetProperty("response", out var respProp))
-                reply = respProp.GetString();
-            else if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
-            {
-                // OpenAI-style response
-                var first = choices.EnumerateArray().FirstOrDefault();
-                if (first.TryGetProperty("message", out var choiceMsg) &&
-                    choiceMsg.TryGetProperty("content", out var choiceContent))
-                    reply = choiceContent.GetString();
-            }
-            else if (root.TryGetProperty("messages", out var msgs) && msgs.ValueKind == JsonValueKind.Array)
-            {
-                // Last assistant message in messages array
-                foreach (var m in msgs.EnumerateArray())
-                {
-                    if (m.TryGetProperty("role", out var roleProp) && roleProp.GetString() == "assistant" &&
-                        m.TryGetProperty("content", out var c))
-                        reply = c.GetString();
-                }
-            }
-
-            if (root.TryGetProperty("conversation_id", out var cidProp))
-                convId = cidProp.GetString();
-
-            return (reply, convId);
-        }
-        catch { return (null, null); }
     }
 
     // ── Helpers ───────────────────────────────────────────────────
