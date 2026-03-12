@@ -203,27 +203,29 @@ public partial class ClawsViewModel : ObservableObject
 
             if (arr.ValueKind != JsonValueKind.Array) return;
 
+            // Parse all items, sort oldest-first, then append
+            var parsed = new List<(string Id, string Role, string Body, string Created, DateTimeOffset Ts)>();
+            foreach (var item in arr.EnumerateArray())
+            {
+                var id = TryGetString(item, "id") ?? string.Empty;
+                var authorId = TryGetString(item, "author_id") ?? string.Empty;
+                var body = TryGetString(item, "body") ?? string.Empty;
+                var created = TryGetString(item, "created") ?? string.Empty;
+                if (string.IsNullOrEmpty(body)) continue;
+                DateTimeOffset.TryParse(created, out var ts);
+                var role = authorId.StartsWith("user:") ? "user" : "assistant";
+                parsed.Add((id, role, body, created, ts));
+            }
+            parsed.Sort((a, b) => a.Ts.CompareTo(b.Ts));
+
             Application.Current.Dispatcher.Invoke(() =>
             {
                 if (clearFirst) ChatMessages.Clear();
-                foreach (var item in arr.EnumerateArray())
+                foreach (var (id, role, body, created, ts) in parsed)
                 {
-                    var id = TryGetString(item, "id") ?? string.Empty;
-                    var authorId = TryGetString(item, "author_id") ?? string.Empty;
-                    var body = TryGetString(item, "body") ?? string.Empty;
-                    var created = TryGetString(item, "created") ?? string.Empty;
-
-                    if (string.IsNullOrEmpty(body)) continue;
-                    if (ChatMessages.Any(m => m.Id == id && id.Length > 0)) continue;
-
-                    // author_id starts with "user:" for user messages, otherwise it's the claw
-                    var role = authorId.StartsWith("user:") ? "user" : "assistant";
-
+                    if (id.Length > 0 && ChatMessages.Any(m => m.Id == id)) continue;
                     ChatMessages.Add(new ClawChatMessage { Id = id, Role = role, Body = body, Timestamp = created });
-
-                    if (!string.IsNullOrEmpty(created) &&
-                        DateTimeOffset.TryParse(created, out var ts) &&
-                        (_lastMessageTime is null || ts > _lastMessageTime))
+                    if (_lastMessageTime is null || ts > _lastMessageTime)
                         _lastMessageTime = ts;
                 }
             });

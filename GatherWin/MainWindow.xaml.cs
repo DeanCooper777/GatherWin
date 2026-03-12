@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -24,6 +25,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+
+        RestoreWindowGeometry();
 
         // Set the current user name for the edit-button visibility converter (Feature 6)
         if (!string.IsNullOrEmpty(viewModel.AgentId))
@@ -71,6 +74,7 @@ public partial class MainWindow : Window
 
         Closing += (_, _) =>
         {
+            SaveWindowGeometry();
             viewModel.PropertyChanged -= _onPropertyChanged;
             viewModel.NewActivityArrived -= _onNewActivity;
             viewModel.Shutdown();
@@ -685,6 +689,59 @@ public partial class MainWindow : Window
             System.Windows.Clipboard.SetText(addr);
             _viewModel.StatusMessage = "Deposit address copied!";
         }
+    }
+
+    // ── Window geometry persistence ─────────────────────────────────
+
+    private static readonly string GeometryPath = Path.Combine(
+        AppDomain.CurrentDomain.BaseDirectory, "window-geometry.json");
+
+    private void SaveWindowGeometry()
+    {
+        try
+        {
+            var geo = new Dictionary<string, object>
+            {
+                ["State"]  = WindowState.ToString(),
+                ["Width"]  = WindowState == WindowState.Normal ? Width  : RestoreBounds.Width,
+                ["Height"] = WindowState == WindowState.Normal ? Height : RestoreBounds.Height,
+                ["Left"]   = WindowState == WindowState.Normal ? Left   : RestoreBounds.Left,
+                ["Top"]    = WindowState == WindowState.Normal ? Top    : RestoreBounds.Top
+            };
+            File.WriteAllText(GeometryPath,
+                System.Text.Json.JsonSerializer.Serialize(geo,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch (Exception ex) { AppLogger.LogError("UI: save window geometry failed", ex); }
+    }
+
+    private void RestoreWindowGeometry()
+    {
+        try
+        {
+            if (!File.Exists(GeometryPath)) return;
+            var json = File.ReadAllText(GeometryPath);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("Width",  out var w) && w.TryGetDouble(out var width))  Width  = width;
+            if (root.TryGetProperty("Height", out var h) && h.TryGetDouble(out var height)) Height = height;
+            if (root.TryGetProperty("Left",   out var l) && l.TryGetDouble(out var left))   Left   = left;
+            if (root.TryGetProperty("Top",    out var t) && t.TryGetDouble(out var top))    Top    = top;
+
+            // Clamp to ensure window is on screen
+            var screenW = SystemParameters.VirtualScreenWidth;
+            var screenH = SystemParameters.VirtualScreenHeight;
+            if (Left < 0) Left = 0;
+            if (Top  < 0) Top  = 0;
+            if (Left + Width  > screenW) Left = Math.Max(0, screenW - Width);
+            if (Top  + Height > screenH) Top  = Math.Max(0, screenH - Height);
+
+            if (root.TryGetProperty("State", out var s) &&
+                Enum.TryParse<WindowState>(s.GetString(), out var state))
+                WindowState = state;
+        }
+        catch (Exception ex) { AppLogger.LogError("UI: restore window geometry failed", ex); }
     }
 
     // ── Claws Web Login ──────────────────────────────────────────────
