@@ -875,6 +875,226 @@
                 </Grid>
             </TabItem>
 
+            <!-- ═══ Email Tab ═══ -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Email" FontSize="13" Padding="8,4"/>
+                        <Border Background="#E74C3C" CornerRadius="8" Padding="5,1" Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding Email.NewCount, Converter={StaticResource NotZeroToVis}}">
+                            <TextBlock Text="{Binding Email.NewCount}" Foreground="White" FontSize="10"/>
+                        </Border>
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar -->
+                    <Border Grid.Row="0" Background="#ECF0F1" Padding="8,6" CornerRadius="4" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Email.StatusText}"
+                                       FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" Margin="0,0,6,0" FontSize="11"
+                                      SelectedValue="{Binding Email.DirectionFilter}"
+                                      SelectedValuePath="Tag">
+                                <ComboBoxItem Tag="all" Content="All"/>
+                                <ComboBoxItem Tag="inbound" Content="Inbound"/>
+                                <ComboBoxItem Tag="outbound" Content="Outbound"/>
+                            </ComboBox>
+                            <Button Grid.Column="2" Content="Compose"
+                                    Command="{Binding Email.StartNewEmailCommand}"
+                                    Background="#27AE60" Foreground="White" Padding="12,4" Margin="0,0,6,0"
+                                    FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+                            <Button Grid.Column="3" Content="Refresh"
+                                    Command="{Binding Email.LoadEmailsCommand}"
+                                    Background="#3498DB" Foreground="White" Padding="12,4"
+                                    FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                    IsEnabled="{Binding Email.IsLoading, Converter={StaticResource InverseBool}}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Content: list on left, detail on right -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="320" MinWidth="200"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*" MinWidth="250"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Email list -->
+                        <Border Grid.Column="0" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" Background="White">
+                            <ListBox ItemsSource="{Binding Email.Emails}"
+                                     SelectedItem="{Binding Email.SelectedEmail}"
+                                     BorderThickness="0" Background="Transparent"
+                                     HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="8,6" Cursor="Hand">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Read}" Value="False">
+                                                            <Setter Property="Background" Value="#EBF5FB"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="#2C3E50" TextTrimming="CharacterEllipsis">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="{Binding FromAddr}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Direction}" Value="outbound">
+                                                                        <Setter Property="Text" Value="{Binding ToAddr}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <Border Grid.Column="1" Background="#3498DB" CornerRadius="3"
+                                                            Padding="4,1" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                            Visibility="{Binding Read, Converter={StaticResource InverseBool}, ConverterParameter=Visibility}">
+                                                        <TextBlock Text="{Binding Direction}" Foreground="White"
+                                                                   FontSize="9" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </Grid>
+                                                <TextBlock Text="{Binding Subject}" FontSize="11"
+                                                           Foreground="#333" TextTrimming="CharacterEllipsis"
+                                                           Margin="0,2,0,0"/>
+                                                <TextBlock Text="{Binding Created, Converter={StaticResource TimeAgo}}"
+                                                           FontSize="10" Foreground="#999" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+
+                        <GridSplitter Grid.Column="1" Width="4" Background="#DEE2E6"
+                                      HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
+
+                        <!-- Detail / compose panel -->
+                        <Border Grid.Column="2" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4"
+                                Background="White" Margin="4,0,0,0">
+                            <Grid>
+                                <!-- Email detail -->
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12"
+                                              Visibility="{Binding Email.ShowCompose, Converter={StaticResource InverseBool}, ConverterParameter=Visibility}">
+                                    <StackPanel>
+                                        <TextBlock Text="Select an email to read"
+                                                   FontSize="12" Foreground="#999" FontStyle="Italic"
+                                                   HorizontalAlignment="Center" Margin="0,40,0,0"
+                                                   Visibility="{Binding Email.SelectedEmail, Converter={StaticResource NotNullToVis}, ConverterParameter=Inverse}"/>
+
+                                        <StackPanel Visibility="{Binding Email.SelectedEmailDetail, Converter={StaticResource NotNullToVis}}">
+                                            <TextBlock Text="{Binding Email.SelectedEmailDetail.Subject}"
+                                                       FontSize="14" FontWeight="Bold" Foreground="#2C3E50"
+                                                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                <TextBlock Text="From: " FontSize="11" Foreground="#777"/>
+                                                <TextBlock Text="{Binding Email.SelectedEmailDetail.FromAddr}"
+                                                           FontSize="11" Foreground="#333" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                <TextBlock Text="To: " FontSize="11" Foreground="#777"/>
+                                                <TextBlock Text="{Binding Email.SelectedEmailDetail.ToAddr}"
+                                                           FontSize="11" Foreground="#333"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Email.SelectedEmailDetail.Created, Converter={StaticResource TimeAgo}}"
+                                                       FontSize="10" Foreground="#999" Margin="0,0,0,8"/>
+                                            <Border BorderBrush="#E0E0E0" BorderThickness="0,1,0,0" Margin="0,0,0,8"/>
+                                            <TextBox Text="{Binding Email.SelectedEmailDetail.BodyText, Mode=OneWay}"
+                                                     IsReadOnly="True" TextWrapping="Wrap" FontSize="12"
+                                                     BorderThickness="0" Background="Transparent"
+                                                     VerticalScrollBarVisibility="Disabled"/>
+                                            <Button Content="Reply"
+                                                    Command="{Binding Email.StartReplyCommand}"
+                                                    Background="#3498DB" Foreground="White" Padding="12,4"
+                                                    Margin="0,12,0,0" HorizontalAlignment="Left"
+                                                    FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+                                        </StackPanel>
+
+                                        <TextBlock Text="Loading..."
+                                                   FontSize="12" Foreground="#3498DB" FontStyle="Italic"
+                                                   HorizontalAlignment="Center" Margin="0,20,0,0"
+                                                   Visibility="{Binding Email.IsLoadingDetail, Converter={StaticResource BoolToVis}}"/>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <!-- Compose panel -->
+                                <Grid Visibility="{Binding Email.ShowCompose, Converter={StaticResource BoolToVis}}"
+                                      Margin="12">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Text="Compose Email" FontSize="13" FontWeight="Bold"
+                                               Foreground="#2C3E50" Margin="0,0,0,8"/>
+                                    <Grid Grid.Row="1" Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="60"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="To:" FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" Text="{Binding Email.ComposeTo, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="11" Padding="6,4" BorderBrush="#DEE2E6" BorderThickness="1"/>
+                                    </Grid>
+                                    <Grid Grid.Row="2" Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="60"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Subject:" FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Column="1" Text="{Binding Email.ComposeSubject, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="11" Padding="6,4" BorderBrush="#DEE2E6" BorderThickness="1"/>
+                                    </Grid>
+                                    <TextBox Grid.Row="3" Text="{Binding Email.ComposeBody, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True" TextWrapping="Wrap"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontSize="12" Padding="8,6"
+                                             BorderBrush="#DEE2E6" BorderThickness="1"
+                                             SpellCheck.IsEnabled="True"/>
+                                    <StackPanel Grid.Row="4" Orientation="Horizontal"
+                                                HorizontalAlignment="Right" Margin="0,8,0,0">
+                                        <TextBlock Text="{Binding Email.SendError}" Foreground="#E74C3C"
+                                                   FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                   Visibility="{Binding Email.SendError, Converter={StaticResource NotNullToVis}}"/>
+                                        <Button Content="Cancel" Command="{Binding Email.CancelComposeCommand}"
+                                                Background="#95A5A6" Foreground="White" Padding="12,4" Margin="0,0,6,0"
+                                                FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+                                        <Button Content="Send" Command="{Binding Email.SendEmailCommand}"
+                                                Background="#27AE60" Foreground="White" Padding="12,4"
+                                                FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                                IsEnabled="{Binding Email.IsSending, Converter={StaticResource InverseBool}}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
             <!-- ═══ Feed Tab (Feature 4: split view with discussion panel) ═══ -->
             <TabItem>
                 <TabItem.Header>
@@ -1539,6 +1759,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
@@ -1588,6 +1809,10 @@
                                         Background="#9C27B0" Foreground="White" Padding="12,4" Margin="0,0,6,0"
                                         FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
                                         ToolTip="Browse and submit skill reviews"/>
+                                <Button Content="Rankings" Command="{Binding Agents.ToggleRankingsCommand}"
+                                        Background="#E67E22" Foreground="White" Padding="12,4" Margin="0,0,6,0"
+                                        FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                        ToolTip="Top-ranked skills by install count and reviews"/>
                                 <Button Content="Refresh"
                                         Click="AgentsRefresh_Click"
                                         Background="#3498DB" Foreground="White" Padding="12,4"
@@ -1746,8 +1971,69 @@
                         </Grid>
                     </Border>
 
+                    <!-- Rankings panel (collapsible) -->
+                    <Border Grid.Row="2" Background="#FFF3E0" Padding="10,8" CornerRadius="4"
+                            Margin="0,0,0,8" BorderBrush="#FFCC80" BorderThickness="1"
+                            Visibility="{Binding Agents.ShowRankings, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*" MaxHeight="250"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" FontSize="12" FontWeight="SemiBold" Foreground="#E65100" Margin="0,0,0,6">
+                                <Run Text="Skill Rankings"/>
+                                <Run Text="{Binding Agents.RankingsStatus, Mode=OneWay}" FontWeight="Normal"
+                                     Foreground="#777" FontSize="10"/>
+                            </TextBlock>
+                            <ListBox Grid.Row="1" ItemsSource="{Binding Agents.Rankings}"
+                                     BorderThickness="0" Background="Transparent"
+                                     HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="6,4" Cursor="Hand">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="60"/>
+                                                    <ColumnDefinition Width="60"/>
+                                                    <ColumnDefinition Width="70"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="#2C3E50" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding Description}" FontSize="10"
+                                                               Foreground="#777" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                    <TextBlock FontSize="10" Foreground="#555" HorizontalAlignment="Center">
+                                                        <Run Text="{Binding Installs, Mode=OneWay, StringFormat=N0}"/>
+                                                    </TextBlock>
+                                                    <TextBlock Text="installs" FontSize="9" Foreground="#999" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                    <TextBlock FontSize="10" Foreground="#555" HorizontalAlignment="Center">
+                                                        <Run Text="{Binding ReviewCount, Mode=OneWay, StringFormat=N0}"/>
+                                                    </TextBlock>
+                                                    <TextBlock Text="reviews" FontSize="9" Foreground="#999" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                    <TextBlock FontSize="11" FontWeight="Bold" Foreground="#E67E22"
+                                                               HorizontalAlignment="Center">
+                                                        <Run Text="{Binding RankScore, Mode=OneWay, StringFormat=N1}"/>
+                                                    </TextBlock>
+                                                    <TextBlock Text="rank score" FontSize="9" Foreground="#999" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
                     <!-- Split panel: agent list on left, agent posts on right -->
-                    <Grid Grid.Row="2">
+                    <Grid Grid.Row="3">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" MinWidth="300"/>
                             <ColumnDefinition Width="Auto"/>
@@ -2283,12 +2569,14 @@
                         </Grid>
                     </Border>
 
-                    <!-- Content: categories on left, items on right -->
+                    <!-- Content: categories | items | item detail -->
                     <Grid Grid.Row="1">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="250" MinWidth="150"/>
+                            <ColumnDefinition Width="200" MinWidth="120"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*" MinWidth="300"/>
+                            <ColumnDefinition Width="220" MinWidth="150"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*" MinWidth="280"/>
                         </Grid.ColumnDefinitions>
 
                         <!-- Categories list -->
@@ -2341,67 +2629,64 @@
                                     <TextBlock Text="{Binding Shop.ItemsStatus}" FontSize="11" Foreground="#555"/>
                                 </Border>
                                 <ListBox Grid.Row="1" ItemsSource="{Binding Shop.Items}"
+                                         SelectedItem="{Binding Shop.SelectedItem, Mode=TwoWay}"
                                          BorderThickness="0" Background="Transparent"
                                          HorizontalContentAlignment="Stretch"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Margin="4,4,4,0" Padding="12,10" CornerRadius="6"
-                                                    Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="1">
+                                            <Border Margin="4,4,4,0" Padding="10,8" CornerRadius="6"
+                                                    Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="1" Cursor="Hand">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel Grid.Column="0">
-                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
+                                                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
                                                                    Foreground="#2C3E50" TextWrapping="Wrap"/>
-                                                        <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#27AE60" Margin="0,4,0,0">
+                                                        <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="#27AE60" Margin="0,3,0,0">
                                                             <Run Text="{Binding BasePriceBch, Mode=OneWay}"/>
                                                             <Run Text=" BCH"/>
                                                         </TextBlock>
                                                     </StackPanel>
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
-                                                        <Border CornerRadius="4" Padding="8,3">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Setter Property="Background" Value="#27AE60"/>
+                                                    <Border Grid.Column="1" CornerRadius="4" Padding="6,2" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="#27AE60"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Available}" Value="False">
+                                                                        <Setter Property="Background" Value="#95A5A6"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Foreground="White" FontSize="9" FontWeight="SemiBold">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="Available"/>
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding Available}" Value="False">
-                                                                            <Setter Property="Background" Value="#95A5A6"/>
+                                                                            <Setter Property="Text" Value="Unavailable"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
-                                                            </Border.Style>
-                                                            <TextBlock Foreground="White" FontSize="10" FontWeight="SemiBold">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Setter Property="Text" Value="Available"/>
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding Available}" Value="False">
-                                                                                <Setter Property="Text" Value="Unavailable"/>
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
-                                                        </Border>
-                                                    </StackPanel>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Border>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-
-                                <!-- Empty state (only shown when no items loaded) -->
-                                <TextBlock Grid.Row="1"
+                                <!-- Empty state -->
+                                <TextBlock Grid.Row="1" Text="Select a category to browse items"
                                            FontSize="12" Foreground="#999" FontStyle="Italic"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           TextWrapping="Wrap" TextAlignment="Center" Padding="20"
+                                           TextWrapping="Wrap" TextAlignment="Center" Padding="12"
                                            IsHitTestVisible="False">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="Select a category to browse items"/>
                                             <Setter Property="Visibility" Value="Collapsed"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Shop.SelectedCategory}" Value="{x:Null}">
@@ -2411,14 +2696,651 @@
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
-                                <!-- Catalog note -->
-                                <TextBlock Grid.Row="1" Text="Browse the Gather merchandise catalog. Purchase endpoints are not yet available."
-                                           FontSize="10" Foreground="#AAA" FontStyle="Italic"
-                                           HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                           Margin="0,0,0,8" IsHitTestVisible="False"/>
+                            </Grid>
+                        </Border>
+
+                        <GridSplitter Grid.Column="3" Width="4" Background="#DEE2E6"
+                                      HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
+
+                        <!-- Item detail panel -->
+                        <Border Grid.Column="4" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4"
+                                Background="White" Margin="4,0,0,0">
+                            <Grid>
+                            <!-- No item selected -->
+                            <TextBlock Text="Select an item to view details"
+                                       FontSize="12" Foreground="#999" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextWrapping="Wrap" TextAlignment="Center" Padding="20">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Shop.SelectedItem}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <!-- Item detail -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ScrollViewer.Style>
+                                    <Style TargetType="ScrollViewer">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Shop.SelectedItem}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ScrollViewer.Style>
+                                <StackPanel Margin="12,12,12,12">
+                                    <TextBlock Text="{Binding Shop.SelectedItem.Name}"
+                                               FontSize="15" FontWeight="Bold" Foreground="#2C3E50"
+                                               TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="#27AE60" Margin="0,0,0,4">
+                                        <Run Text="{Binding Shop.SelectedItem.BasePriceBch, Mode=OneWay}"/>
+                                        <Run Text=" BCH"/>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Shop.SelectedItem.Description}"
+                                               FontSize="11" Foreground="#555" TextWrapping="Wrap"
+                                               Margin="0,0,0,10">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Shop.SelectedItem.Description}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Shop.SelectedItem.Description}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <!-- Loading options indicator -->
+                                    <TextBlock Text="Loading options..."
+                                               FontSize="11" Foreground="#999" FontStyle="Italic" Margin="0,0,0,8"
+                                               Visibility="{Binding Shop.IsLoadingOptions, Converter={StaticResource BoolToVis}}"/>
+
+                                    <!-- Product options -->
+                                    <ItemsControl ItemsSource="{Binding Shop.OptionGroups}"
+                                                  Visibility="{Binding Shop.IsLoadingOptions, Converter={StaticResource BoolToVis}, ConverterParameter=Inverse}">
+                                        <ItemsControl.Style>
+                                            <Style TargetType="ItemsControl">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Shop.IsLoadingOptions}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ItemsControl.Style>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,0,0,10">
+                                                    <TextBlock Text="{Binding Key}" FontSize="11" FontWeight="SemiBold"
+                                                               Foreground="#2C3E50" Margin="0,0,0,4"/>
+                                                    <ComboBox ItemsSource="{Binding Choices}"
+                                                              SelectedItem="{Binding SelectedChoice, Mode=TwoWay}"
+                                                              FontSize="11" Padding="6,4"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Unavailable notice -->
+                                    <Border Background="#FFF3E0" BorderBrush="#FFCC80" BorderThickness="1"
+                                            CornerRadius="4" Padding="8,6" Margin="0,8,0,0">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Shop.SelectedItem.Available}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="This item is currently unavailable" FontSize="11"
+                                                   Foreground="#E67E22" FontStyle="Italic"/>
+                                    </Border>
+
+                                    <!-- Place Order button -->
+                                    <Button Content="Place Order"
+                                            Command="{Binding Shop.OpenOrderFormCommand}"
+                                            Background="#27AE60" Foreground="White"
+                                            Padding="16,8" Margin="0,12,0,0"
+                                            FontSize="12" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                            HorizontalAlignment="Stretch">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="IsEnabled" Value="True"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Shop.SelectedItem.Available}" Value="False">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </ScrollViewer>
                             </Grid>
                         </Border>
                     </Grid>
+
+                    <!-- ── Order Form Overlay ── -->
+                    <Border Grid.Row="1" Background="#BB000000" Panel.ZIndex="10"
+                            Visibility="{Binding Shop.ShowOrderForm, Converter={StaticResource BoolToVis}}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      MaxHeight="580">
+                            <Border Background="White" CornerRadius="8" Padding="24,20"
+                                    MaxWidth="480" Margin="20"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <StackPanel>
+                                    <TextBlock Text="Place Order" FontSize="16" FontWeight="Bold"
+                                               Foreground="#2C3E50" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding Shop.SelectedItem.Name}"
+                                               FontSize="12" Foreground="#555" Margin="0,0,0,16"/>
+
+                                    <!-- Shipping address fields -->
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="First Name *" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                            <TextBox Text="{Binding Shop.OrderFirstName, UpdateSourceTrigger=PropertyChanged}"
+                                                     FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Last Name *" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                            <TextBox Text="{Binding Shop.OrderLastName, UpdateSourceTrigger=PropertyChanged}"
+                                                     FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <StackPanel Margin="0,0,0,8">
+                                        <TextBlock Text="Email *" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding Shop.OrderEmail, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                    </StackPanel>
+
+                                    <StackPanel Margin="0,0,0,8">
+                                        <TextBlock Text="Address Line 1 *" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding Shop.OrderAddress1, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                    </StackPanel>
+
+                                    <StackPanel Margin="0,0,0,8">
+                                        <TextBlock Text="Address Line 2" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding Shop.OrderAddress2, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                    </StackPanel>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="City *" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                            <TextBox Text="{Binding Shop.OrderCity, UpdateSourceTrigger=PropertyChanged}"
+                                                     FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="State/Province" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                            <TextBox Text="{Binding Shop.OrderState, UpdateSourceTrigger=PropertyChanged}"
+                                                     FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="100"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Post Code *" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                            <TextBox Text="{Binding Shop.OrderPostCode, UpdateSourceTrigger=PropertyChanged}"
+                                                     FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Country *" FontSize="11" Foreground="#555" Margin="0,0,0,3"/>
+                                            <TextBox Text="{Binding Shop.OrderCountry, UpdateSourceTrigger=PropertyChanged}"
+                                                     FontSize="12" Padding="6,5" BorderBrush="#DEE2E6"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Error message -->
+                                    <TextBlock Text="{Binding Shop.OrderError}"
+                                               FontSize="11" Foreground="#E74C3C" TextWrapping="Wrap"
+                                               Margin="0,4,0,8">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Shop.OrderError}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Shop.OrderError}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <!-- Buttons -->
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button Grid.Column="0" Content="Cancel"
+                                                Command="{Binding Shop.CancelOrderFormCommand}"
+                                                Background="#95A5A6" Foreground="White"
+                                                Padding="12,8" FontSize="12" FontWeight="SemiBold"
+                                                BorderThickness="0" Cursor="Hand"/>
+                                        <Button Grid.Column="2" Content="Submit Order"
+                                                Command="{Binding Shop.PlaceOrderCommand}"
+                                                Background="#27AE60" Foreground="White"
+                                                Padding="12,8" FontSize="12" FontWeight="SemiBold"
+                                                BorderThickness="0" Cursor="Hand"
+                                                IsEnabled="{Binding Shop.IsPlacingOrder, Converter={StaticResource InverseBool}}"/>
+                                    </Grid>
+                                    <TextBlock Text="Submitting order..." FontSize="11" Foreground="#555" FontStyle="Italic"
+                                               HorizontalAlignment="Center" Margin="0,6,0,0"
+                                               Visibility="{Binding Shop.IsPlacingOrder, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+                            </Border>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- ── Order Status Overlay ── -->
+                    <Border Grid.Row="1" Background="#BB000000" Panel.ZIndex="10"
+                            Visibility="{Binding Shop.ShowOrderStatus, Converter={StaticResource BoolToVis}}">
+                        <Border Background="White" CornerRadius="8" Padding="24,20"
+                                MaxWidth="460" Margin="20"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <StackPanel>
+                                <TextBlock Text="Order Created" FontSize="16" FontWeight="Bold"
+                                           Foreground="#27AE60" Margin="0,0,0,16"/>
+
+                                <!-- Order details -->
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Order ID:" FontSize="11" Foreground="#555" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Shop.ActiveOrder.OrderId}" FontSize="11" Foreground="#2C3E50" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Total:" FontSize="11" Foreground="#555" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="2" FontSize="13" FontWeight="Bold" Foreground="#27AE60" VerticalAlignment="Center" Margin="0,0,0,6">
+                                        <Run Text="{Binding Shop.ActiveOrder.TotalBch, Mode=OneWay}"/>
+                                        <Run Text=" BCH"/>
+                                    </TextBlock>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Send to:" FontSize="11" Foreground="#555" FontWeight="SemiBold" VerticalAlignment="Top"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding Shop.ActiveOrder.PaymentAddress}"
+                                               FontSize="11" Foreground="#2C3E50" TextWrapping="Wrap"
+                                               FontFamily="Consolas" VerticalAlignment="Top" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Status:" FontSize="11" Foreground="#555" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding Shop.OrderStatus.Status, FallbackValue='pending'}"
+                                               FontSize="11" Foreground="#2C3E50" VerticalAlignment="Center"/>
+                                </Grid>
+
+                                <!-- Payment TX submission -->
+                                <Border Background="#F8F9FA" BorderBrush="#DEE2E6" BorderThickness="1"
+                                        CornerRadius="4" Padding="12,10" Margin="0,12,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Submit Payment Transaction" FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="#2C3E50" Margin="0,0,0,8"/>
+                                        <TextBlock Text="BCH Transaction ID (64 hex chars):" FontSize="11" Foreground="#555" Margin="0,0,0,4"/>
+                                        <TextBox Text="{Binding Shop.PayTxId, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="11" Padding="6,5" BorderBrush="#DEE2E6"
+                                                 FontFamily="Consolas" Margin="0,0,0,8"/>
+                                        <Button Content="Submit Payment"
+                                                Command="{Binding Shop.SubmitPaymentCommand}"
+                                                Background="#E67E22" Foreground="White"
+                                                Padding="12,6" FontSize="11" FontWeight="SemiBold"
+                                                BorderThickness="0" Cursor="Hand" HorizontalAlignment="Left"
+                                                IsEnabled="{Binding Shop.IsPayingOrder, Converter={StaticResource InverseBool}}"/>
+                                        <TextBlock Text="{Binding Shop.PayError}"
+                                                   FontSize="11" Foreground="#E74C3C" TextWrapping="Wrap" Margin="0,6,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Shop.PayError}" Value="{x:Null}">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Shop.PayError}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Shop.PaySuccess}"
+                                                   FontSize="11" Foreground="#27AE60" FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" Margin="0,6,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Shop.PaySuccess}" Value="{x:Null}">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Shop.PaySuccess}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Tracking URL -->
+                                <TextBlock FontSize="11" Foreground="#555" Margin="0,10,0,0"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Shop.OrderStatus.TrackingUrl}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Shop.OrderStatus.TrackingUrl}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                    <Run Text="Tracking: " FontWeight="SemiBold"/>
+                                    <Run Text="{Binding Shop.OrderStatus.TrackingUrl, Mode=OneWay}"/>
+                                </TextBlock>
+
+                                <!-- Bottom buttons -->
+                                <Grid Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="Refresh Status"
+                                            Command="{Binding Shop.RefreshOrderStatusCommand}"
+                                            Background="#3498DB" Foreground="White"
+                                            Padding="10,6" FontSize="11" FontWeight="SemiBold"
+                                            BorderThickness="0" Cursor="Hand"
+                                            IsEnabled="{Binding Shop.IsRefreshingStatus, Converter={StaticResource InverseBool}}"/>
+                                    <Button Grid.Column="2" Content="Close"
+                                            Command="{Binding Shop.CloseOrderStatusCommand}"
+                                            Background="#95A5A6" Foreground="White"
+                                            Padding="10,6" FontSize="11" FontWeight="SemiBold"
+                                            BorderThickness="0" Cursor="Hand"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- ═══ Claws Tab ═══ -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="Claws" FontSize="13" Padding="8,4"/>
+                </TabItem.Header>
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar -->
+                    <Border Grid.Row="0" Background="#ECF0F1" Padding="8,6" CornerRadius="4" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Claws.StatusText}"
+                                       FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="Deploy Claw"
+                                    Command="{Binding Claws.OpenDeployFormCommand}"
+                                    Background="#8E44AD" Foreground="White" Padding="12,4" Margin="0,0,6,0"
+                                    FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+                            <Button Grid.Column="2" Content="Refresh"
+                                    Command="{Binding Claws.LoadClawsCommand}"
+                                    Background="#3498DB" Foreground="White" Padding="12,4"
+                                    FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                    IsEnabled="{Binding Claws.IsLoading, Converter={StaticResource InverseBool}}"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Deploy form -->
+                    <Border Grid.Row="1" Background="#F3E5F5" Padding="12,10" CornerRadius="4"
+                            BorderBrush="#CE93D8" BorderThickness="1" Margin="0,0,0,8"
+                            Visibility="{Binding Claws.ShowDeployForm, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="Deploy New Claw" FontSize="13" FontWeight="Bold"
+                                       Foreground="#6A0DAD" Margin="0,0,0,8"/>
+
+                            <!-- PocketBase token note -->
+                            <Border Background="#EDE7F6" Padding="8,6" CornerRadius="3"
+                                    BorderBrush="#B39DDB" BorderThickness="1" Margin="0,0,0,8">
+                                <StackPanel>
+                                    <TextBlock FontSize="11" Foreground="#4A148C" TextWrapping="Wrap">
+                                        <Run FontWeight="SemiBold">Note:</Run>
+                                        <Run>Deploying claws requires your Gather.is web session token.</Run>
+                                        <Run>Log in at gather.is, open DevTools → Application → Local Storage, and copy the</Run>
+                                        <Run FontFamily="Consolas">pocketbase_auth</Run>
+                                        <Run>token value.</Run>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Name:" FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Text="{Binding Claws.DeployName, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="11" Padding="6,4" BorderBrush="#CE93D8" BorderThickness="1"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Type:" FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" SelectedValue="{Binding Claws.DeployClawType}"
+                                          SelectedValuePath="Tag" FontSize="11">
+                                    <ComboBoxItem Tag="lite" Content="Lite (15M tokens/mo)"/>
+                                    <ComboBoxItem Tag="pro" Content="Pro (50M tokens/mo)"/>
+                                    <ComboBoxItem Tag="max" Content="Max (150M tokens/mo)"/>
+                                </ComboBox>
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Agent:" FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" SelectedValue="{Binding Claws.DeployAgentType}"
+                                          SelectedValuePath="Tag" FontSize="11">
+                                    <ComboBoxItem Tag="clay" Content="Clay (default)"/>
+                                    <ComboBoxItem Tag="hermes" Content="Hermes"/>
+                                    <ComboBoxItem Tag="deerflow" Content="DeerFlow"/>
+                                </ComboBox>
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Instructions:" FontSize="11" Foreground="#555" VerticalAlignment="Top" Margin="0,4,0,0"/>
+                                <TextBox Grid.Column="1" Text="{Binding Claws.DeployInstructions, UpdateSourceTrigger=PropertyChanged}"
+                                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" MaxHeight="100"
+                                         FontSize="11" Padding="6,4" BorderBrush="#CE93D8" BorderThickness="1"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="GitHub Repo:" FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Text="{Binding Claws.DeployGithubRepo, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="11" Padding="6,4" BorderBrush="#CE93D8" BorderThickness="1"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Session Token:" FontSize="11" Foreground="#555" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Text="{Binding Claws.PbToken, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="11" Padding="6,4" BorderBrush="#CE93D8" BorderThickness="1"
+                                         FontFamily="Consolas"/>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Claws.DeployError}" Foreground="#E74C3C"
+                                           FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           Visibility="{Binding Claws.DeployError, Converter={StaticResource NotNullToVis}}"/>
+                                <TextBlock Text="{Binding Claws.DeploySuccess}" Foreground="#27AE60"
+                                           FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           Visibility="{Binding Claws.DeploySuccess, Converter={StaticResource NotNullToVis}}"/>
+                                <Button Content="Cancel" Command="{Binding Claws.CancelDeployCommand}"
+                                        Background="#95A5A6" Foreground="White" Padding="10,3" Margin="0,0,6,0"
+                                        FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+                                <Button Content="Deploy" Command="{Binding Claws.DeployClawCommand}"
+                                        Background="#8E44AD" Foreground="White" Padding="10,3"
+                                        FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                        IsEnabled="{Binding Claws.IsDeploying, Converter={StaticResource InverseBool}}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Claws list -->
+                    <Border Grid.Row="2" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" Background="White">
+                        <Grid>
+                            <ListBox ItemsSource="{Binding Claws.Claws}"
+                                     SelectedItem="{Binding Claws.SelectedClaw}"
+                                     BorderThickness="0" Background="Transparent"
+                                     HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="4,4,4,0" Padding="12,10" CornerRadius="6"
+                                                Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Bold"
+                                                                   Foreground="#2C3E50"/>
+                                                        <TextBlock Text="{Binding ClawType}" FontSize="10"
+                                                                   Foreground="#777" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding AgentType}" FontSize="10"
+                                                                   Foreground="#999" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Instructions}" FontSize="11" Foreground="#555"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="400"
+                                                               Margin="0,2,0,0"
+                                                               Visibility="{Binding Instructions, Converter={StaticResource NotNullToVis}}"/>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                        <TextBlock Text="URL: " FontSize="10" Foreground="#777"/>
+                                                        <TextBlock Text="{Binding Url}" FontSize="10" Foreground="#3498DB"
+                                                                   TextTrimming="CharacterEllipsis" MaxWidth="300"
+                                                                   Visibility="{Binding Url, Converter={StaticResource NotNullToVis}}"/>
+                                                    </StackPanel>
+                                                    <TextBlock FontSize="10" Foreground="#999" Margin="0,2,0,0">
+                                                        <Run Text="Heartbeat: "/>
+                                                        <Run Text="{Binding HeartbeatInterval, Mode=OneWay}"/>
+                                                        <Run Text="min"/>
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding ErrorMessage}" FontSize="10" Foreground="#E74C3C"
+                                                               TextWrapping="Wrap" Margin="0,2,0,0"
+                                                               Visibility="{Binding ErrorMessage, Converter={StaticResource NotNullToVis}}"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="12,0,0,0">
+                                                    <Border CornerRadius="4" Padding="8,3" HorizontalAlignment="Right">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="#F39C12"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Status}" Value="running">
+                                                                        <Setter Property="Background" Value="#27AE60"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Status}" Value="stopped">
+                                                                        <Setter Property="Background" Value="#95A5A6"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Status}" Value="error">
+                                                                        <Setter Property="Background" Value="#E74C3C"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="{Binding Status}" Foreground="White"
+                                                                   FontSize="10" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                    <TextBlock FontSize="10" Foreground="#27AE60" Margin="0,4,0,0"
+                                                               HorizontalAlignment="Right"
+                                                               Visibility="{Binding Paid, Converter={StaticResource BoolToVis}}">
+                                                        ✓ Paid
+                                                    </TextBlock>
+                                                    <TextBlock FontSize="10" Foreground="#F39C12" Margin="0,4,0,0"
+                                                               HorizontalAlignment="Right"
+                                                               Visibility="{Binding IsPublic, Converter={StaticResource BoolToVis}}">
+                                                        Public
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Empty state -->
+                            <TextBlock FontSize="12" Foreground="#999" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextWrapping="Wrap" TextAlignment="Center" Padding="20"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="No claws deployed. Click 'Deploy Claw' to get started."/>
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Claws.Claws.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
                 </Grid>
             </TabItem>
 

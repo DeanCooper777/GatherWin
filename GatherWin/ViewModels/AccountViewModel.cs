@@ -17,10 +17,21 @@ public partial class AccountViewModel : ObservableObject
     [ObservableProperty] private int _freePostsRemaining;
     [ObservableProperty] private int _freeCommentsRemaining;
     [ObservableProperty] private bool _isSuspended;
+    [ObservableProperty] private string? _suspendReason;
     [ObservableProperty] private DateTimeOffset _tokenExpiry;
     [ObservableProperty] private bool _isAuthenticated;
     [ObservableProperty] private string? _depositAddress;
     [ObservableProperty] private bool _showDeposit;
+
+    // ── Own Agent Profile ─────────────────────────────────────
+
+    [ObservableProperty] private string? _agentName;
+    [ObservableProperty] private string? _agentDescription;
+    [ObservableProperty] private bool _agentVerified;
+    [ObservableProperty] private string? _agentTwitterHandle;
+    [ObservableProperty] private int _agentPostCount;
+    [ObservableProperty] private int _agentReviewCount;
+    [ObservableProperty] private bool _isLoadingProfile;
 
     public AccountViewModel(GatherApiClient api)
     {
@@ -45,12 +56,90 @@ public partial class AccountViewModel : ObservableObject
         CommentsAvailable = hasBch && hasCommentFee && commentFee > 0 ? (int)(bchAmount / commentFee) : 0;
     }
 
-    // ── BCH Deposit (Task #9) ─────────────────────────────────
+    public void UpdateFromProfile(AgentProfile profile)
+    {
+        AgentName = profile.Name;
+        AgentDescription = profile.Description;
+        AgentVerified = profile.Verified;
+        AgentTwitterHandle = profile.TwitterHandle;
+        AgentPostCount = profile.PostCount;
+        AgentReviewCount = profile.ReviewCount;
+    }
+
+    [RelayCommand]
+    private async Task RefreshProfileAsync(CancellationToken ct)
+    {
+        IsLoadingProfile = true;
+        try
+        {
+            var profile = await _api.GetMyProfileAsync(ct);
+            if (profile is not null)
+                UpdateFromProfile(profile);
+        }
+        catch (Exception ex) { AppLogger.LogError("Account: profile refresh failed", ex); }
+        finally { IsLoadingProfile = false; }
+    }
+
+    // ── BCH Deposit ─────────────────────────────────────────
 
     [RelayCommand]
     private void ToggleDeposit() => ShowDeposit = !ShowDeposit;
 
-    // ── Platform Feedback (Task #16) ───────────────────────────
+    [ObservableProperty] private bool _showDepositTx;
+    [ObservableProperty] private string _depositTxId = string.Empty;
+    [ObservableProperty] private bool _isDepositing;
+    [ObservableProperty] private string? _depositError;
+    [ObservableProperty] private string? _depositSuccess;
+
+    [RelayCommand]
+    private void ToggleDepositTx()
+    {
+        ShowDepositTx = !ShowDepositTx;
+        DepositError = null;
+        DepositSuccess = null;
+        DepositTxId = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task SubmitDepositAsync(CancellationToken ct)
+    {
+        var txId = DepositTxId.Trim();
+        if (txId.Length != 64)
+        {
+            DepositError = "BCH tx_id must be exactly 64 hex characters";
+            return;
+        }
+
+        IsDepositing = true;
+        DepositError = null;
+        DepositSuccess = null;
+
+        try
+        {
+            var (success, result, error) = await _api.DepositAsync(txId, ct);
+            if (success)
+            {
+                DepositSuccess = result is not null
+                    ? $"Deposited {result.AmountBch} BCH — new balance: {result.NewBalanceBch} BCH"
+                    : "Deposit submitted successfully";
+                DepositTxId = string.Empty;
+                ShowDepositTx = false;
+                AppLogger.Log("Account", $"Deposit submitted: tx={txId[..8]}...");
+            }
+            else
+            {
+                DepositError = error ?? "Deposit failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Account: deposit failed", ex);
+            DepositError = ex.Message;
+        }
+        finally { IsDepositing = false; }
+    }
+
+    // ── Platform Feedback ───────────────────────────────────────
 
     [ObservableProperty] private bool _showFeedback;
     [ObservableProperty] private int _feedbackRating = 3;

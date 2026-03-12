@@ -67,11 +67,13 @@ public partial class MainViewModel : ObservableObject
     public AccountViewModel Account { get; }
     public CommentsViewModel Comments { get; }
     public InboxViewModel Inbox { get; }
+    public EmailViewModel Email { get; }
     public FeedViewModel Feed { get; }
     public ChannelsViewModel Channels { get; }
     public WhatsNewViewModel WhatsNew { get; }
     public AgentsViewModel Agents { get; }
     public ShopViewModel Shop { get; }
+    public ClawsViewModel Claws { get; }
     public ObservableCollection<ActivityItem> AllActivity { get; } = new();
 
     public string AgentId => _agentId;
@@ -103,11 +105,13 @@ public partial class MainViewModel : ObservableObject
         Account = new AccountViewModel(api);
         Comments = new CommentsViewModel(api);
         Inbox = new InboxViewModel(api);
+        Email = new EmailViewModel(api);
         Feed = new FeedViewModel(api);
         Channels = new ChannelsViewModel(api);
         WhatsNew = new WhatsNewViewModel(api, keysDirectory);
         Agents = new AgentsViewModel(api);
         Shop = new ShopViewModel(api);
+        Claws = new ClawsViewModel(api);
 
         // Apply saved post display preference
         _api.ShowFullPosts = WhatsNew.Options.ShowFullPosts;
@@ -181,23 +185,34 @@ public partial class MainViewModel : ObservableObject
         {
             case 1: Comments.ResetNewCount(); break;
             case 2: Inbox.ResetNewCount(); break;
-            case 3: Feed.ResetNewCount(); break;
-            case 4: Channels.ResetNewCount(); break;
-            case 5:
+            case 3:
+                // Email tab
+                Email.ResetNewCount();
+                if (IsConnected && !Email.IsLoading && Email.Emails.Count == 0)
+                    _ = Email.LoadEmailsAsync(CancellationToken.None);
+                break;
+            case 4: Feed.ResetNewCount(); break;
+            case 5: Channels.ResetNewCount(); break;
+            case 6:
                 // Auto-load agents when switching to Agents tab (only if not already loaded)
                 if (IsConnected && !Agents.IsLoading && Agents.Agents.Count == 0)
                     _ = Agents.LoadAgentsAsync(CancellationToken.None);
                 break;
-            case 6:
+            case 7:
                 WhatsNew.ResetNewCount();
                 // Auto-check when switching to What's New tab (if connected)
                 if (IsConnected && !WhatsNew.IsChecking)
                     _ = WhatsNew.CheckForNewsAsync(CancellationToken.None);
                 break;
-            case 7:
+            case 8:
                 // Auto-load shop when switching to Shop tab
                 if (IsConnected && !Shop.IsLoading && Shop.Categories.Count == 0)
                     _ = Shop.LoadCategoriesAsync(CancellationToken.None);
+                break;
+            case 9:
+                // Auto-load claws when switching to Claws tab
+                if (IsConnected && !Claws.IsLoading && Claws.Claws.Count == 0)
+                    _ = Claws.LoadClawsAsync(CancellationToken.None);
                 break;
         }
     }
@@ -281,20 +296,32 @@ public partial class MainViewModel : ObservableObject
             TokenExpiryDisplay = $"Token valid until {_auth.TokenExpiry.ToLocalTime():HH:mm:ss}";
             AppLogger.Log("VM", "Authenticated OK");
 
-            // Fetch own agent info (Feature 10)
+            // Fetch own agent profile (identity + activity counts)
             try
             {
-                var agentInfo = await _api.GetAgentByIdAsync(_agentId, ct);
-                if (agentInfo is not null)
+                var profile = await _api.GetMyProfileAsync(ct);
+                if (profile is not null)
                 {
-                    CurrentAgentName = agentInfo.Name ?? _agentId;
-                    CurrentAgentDescription = agentInfo.Description ?? "";
-                    AppLogger.Log("VM", $"Agent identity: {CurrentAgentName}");
+                    CurrentAgentName = profile.Name ?? _agentId;
+                    CurrentAgentDescription = profile.Description ?? "";
+                    Application.Current.Dispatcher.Invoke(() => Account.UpdateFromProfile(profile));
+                    AppLogger.Log("VM", $"Agent identity: {CurrentAgentName} (posts={profile.PostCount}, reviews={profile.ReviewCount}, verified={profile.Verified})");
+                }
+                else
+                {
+                    // Fallback: get agent by ID
+                    var agentInfo = await _api.GetAgentByIdAsync(_agentId, ct);
+                    if (agentInfo is not null)
+                    {
+                        CurrentAgentName = agentInfo.Name ?? _agentId;
+                        CurrentAgentDescription = agentInfo.Description ?? "";
+                        AppLogger.Log("VM", $"Agent identity (fallback): {CurrentAgentName}");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                AppLogger.LogError("VM: Failed to fetch agent info", ex);
+                AppLogger.LogError("VM: Failed to fetch agent profile", ex);
             }
 
             // Fetch balance
@@ -402,6 +429,25 @@ public partial class MainViewModel : ObservableObject
             {
                 AppLogger.LogError("VM: Failed to pre-load inbox", ex);
             }
+
+            // Pre-load emails
+            AppLogger.Log("VM", "Pre-loading emails...");
+            try
+            {
+                var emails = await _api.GetEmailsAsync(ct, limit: 50);
+                if (emails?.Emails is not null)
+                {
+                    Email.SeedSeenIds(emails.Emails.Select(e => e.Id ?? ""));
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        foreach (var e in emails.Emails)
+                            Email.Emails.Add(e);
+                    });
+                    AppLogger.Log("VM", $"Pre-loaded {emails.Emails.Count} emails ({emails.Unread} unread)");
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { AppLogger.LogError("VM: Failed to pre-load emails", ex); }
 
             // Load all channels for the Channels tab
             AppLogger.Log("VM", "Loading all channels...");
@@ -838,8 +884,8 @@ public partial class MainViewModel : ObservableObject
     {
         AppLogger.Log("VM", $"Navigating to post discussion: {postId}");
 
-        // Switch to What's New tab (index 6)
-        SelectedTabIndex = 6;
+        // Switch to What's New tab (index 7)
+        SelectedTabIndex = 7;
 
         // Create a minimal WhatsNewEntry for the post and load its discussion
         var post = await _api.GetPostWithCommentsAsync(postId, CancellationToken.None);

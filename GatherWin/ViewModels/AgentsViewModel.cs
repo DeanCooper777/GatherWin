@@ -583,6 +583,45 @@ public partial class AgentsViewModel : ObservableObject
         }
     }
 
+    // ── Rankings (Task: top skills by score) ────────────────────
+
+    public ObservableCollection<RankedSkill> Rankings { get; } = new();
+    [ObservableProperty] private bool _showRankings;
+    [ObservableProperty] private bool _isLoadingRankings;
+    [ObservableProperty] private string _rankingsStatus = string.Empty;
+
+    [RelayCommand]
+    private async Task ToggleRankingsAsync(CancellationToken ct)
+    {
+        ShowRankings = !ShowRankings;
+        if (!ShowRankings) { Rankings.Clear(); RankingsStatus = string.Empty; return; }
+        await LoadRankingsAsync(ct);
+    }
+
+    private async Task LoadRankingsAsync(CancellationToken ct)
+    {
+        IsLoadingRankings = true;
+        RankingsStatus = "Loading rankings...";
+        try
+        {
+            var response = await _api.GetRankingsAsync(ct, limit: 50);
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                Rankings.Clear();
+                if (response?.Rankings is not null)
+                    foreach (var r in response.Rankings)
+                        Rankings.Add(r);
+            });
+            RankingsStatus = Rankings.Count > 0 ? $"Top {Rankings.Count} skills" : "No rankings yet";
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Agents: load rankings failed", ex);
+            RankingsStatus = $"Error: {ex.Message}";
+        }
+        finally { IsLoadingRankings = false; }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────
 
     private static string TruncateBody(string text, int maxLength = 120)

@@ -112,6 +112,32 @@ public class GatherApiClient
         catch (Exception ex) { AppLogger.LogError($"API: PUT {url} failed", ex); return null; }
     }
 
+    private async Task<HttpResponseMessage?> AuthenticatedPutWithBodyAsync(
+        string url, object body, CancellationToken ct)
+    {
+        try
+        {
+            await _auth.EnsureAuthenticatedAsync(ct);
+            AppLogger.Log("API", $"PUT {url}");
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"{GatherBaseUrl}{url}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _auth.Token);
+            request.Content = JsonContent.Create(body, options: _jsonOpts);
+            var response = await _http.SendAsync(request, ct);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                await _auth.EnsureAuthenticatedAsync(ct);
+                using var retry = new HttpRequestMessage(HttpMethod.Put, $"{GatherBaseUrl}{url}");
+                retry.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _auth.Token);
+                retry.Content = JsonContent.Create(body, options: _jsonOpts);
+                response = await _http.SendAsync(retry, ct);
+            }
+            AppLogger.Log("API", $"PUT {url} → {(int)response.StatusCode}");
+            return response;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { AppLogger.LogError($"API: PUT {url} failed", ex); return null; }
+    }
+
     private async Task<HttpResponseMessage?> AuthenticatedDeleteAsync(string url, CancellationToken ct)
     {
         try
@@ -755,6 +781,247 @@ public class GatherApiClient
 
         var error = await response.Content.ReadAsStringAsync(ct);
         return (false, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Agent Profile ────────────────────────────────────────────
+
+    /// <summary>GET /api/agents/me — own profile with activity counts.</summary>
+    public async Task<AgentProfile?> GetMyProfileAsync(CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync("/api/agents/me", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<AgentProfile>(body, _jsonOpts);
+    }
+
+    // ── Balance Deposit ──────────────────────────────────────────
+
+    /// <summary>PUT /api/balance/deposit — credit a BCH deposit by tx_id.</summary>
+    public async Task<(bool Success, DepositResponse? Result, string? Error)> DepositAsync(
+        string txId, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, string> { ["tx_id"] = txId };
+        var response = await AuthenticatedPutWithBodyAsync("/api/balance/deposit", payload, ct);
+        if (response is null) return (false, null, "Network error");
+        if (response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            try { return (true, JsonSerializer.Deserialize<DepositResponse>(body, _jsonOpts), null); }
+            catch { return (true, null, null); }
+        }
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, null, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Email ─────────────────────────────────────────────────────
+
+    public async Task<EmailListResponse?> GetEmailsAsync(
+        CancellationToken ct, string? direction = null, bool unreadOnly = false, int limit = 50)
+    {
+        var url = $"/api/email?limit={limit}";
+        if (!string.IsNullOrEmpty(direction)) url += $"&direction={Uri.EscapeDataString(direction)}";
+        if (unreadOnly) url += "&unread_only=true";
+        var response = await AuthenticatedGetAsync(url, ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<EmailListResponse>(body, _jsonOpts);
+    }
+
+    public async Task<EmailDetail?> GetEmailDetailAsync(string emailId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/email/{emailId}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<EmailDetail>(body, _jsonOpts);
+    }
+
+    public async Task<(bool Success, string? Error)> MarkEmailReadAsync(string emailId, CancellationToken ct)
+    {
+        var response = await AuthenticatedPutAsync($"/api/email/{emailId}/read", ct);
+        if (response is null) return (false, "Network error");
+        if (response.IsSuccessStatusCode) return (true, null);
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    public async Task<(bool Success, string? Error)> SendEmailAsync(
+        string to, string subject, string bodyHtml, string? inReplyTo, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            ["to"] = to,
+            ["subject"] = subject,
+            ["body_html"] = bodyHtml
+        };
+        if (!string.IsNullOrEmpty(inReplyTo)) payload["in_reply_to"] = inReplyTo;
+        var response = await AuthenticatedPostAsync("/api/email/send", payload, ct);
+        if (response is null) return (false, "Network error");
+        if (response.IsSuccessStatusCode) return (true, null);
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Rankings ─────────────────────────────────────────────────
+
+    public async Task<RankingsResponse?> GetRankingsAsync(CancellationToken ct, int limit = 20)
+    {
+        var response = await AuthenticatedGetAsync($"/api/rankings?limit={limit}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<RankingsResponse>(body, _jsonOpts);
+    }
+
+    // ── Proofs ───────────────────────────────────────────────────
+
+    public async Task<ProofsListResponse?> GetProofsAsync(CancellationToken ct, int limit = 20)
+    {
+        var response = await AuthenticatedGetAsync($"/api/proofs?limit={limit}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<ProofsListResponse>(body, _jsonOpts);
+    }
+
+    public async Task<ProofDetail?> GetProofDetailAsync(string proofId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/proofs/{proofId}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<ProofDetail>(body, _jsonOpts);
+    }
+
+    public async Task<(bool Success, ProofVerifyResponse? Result, string? Error)> VerifyProofAsync(
+        string proofId, CancellationToken ct)
+    {
+        var response = await AuthenticatedPostAsync($"/api/proofs/{proofId}/verify", new { }, ct);
+        if (response is null) return (false, null, "Network error");
+        if (response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            try { return (true, JsonSerializer.Deserialize<ProofVerifyResponse>(body, _jsonOpts), null); }
+            catch { return (true, null, null); }
+        }
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, null, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    // ── Skill Detail ─────────────────────────────────────────────
+
+    public async Task<SkillItem?> GetSkillDetailAsync(string skillId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/skills/{Uri.EscapeDataString(skillId)}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<SkillItem>(body, _jsonOpts);
+    }
+
+    public async Task<SkillsResponse?> GetSkillsFilteredAsync(
+        CancellationToken ct, string? category = null, string? q = null,
+        string sort = "rank", string? minSecurity = null, int limit = 50)
+    {
+        var url = $"/api/skills?limit={limit}&sort={Uri.EscapeDataString(sort)}";
+        if (!string.IsNullOrEmpty(category)) url += $"&category={Uri.EscapeDataString(category)}";
+        if (!string.IsNullOrEmpty(q)) url += $"&q={Uri.EscapeDataString(q)}";
+        if (!string.IsNullOrEmpty(minSecurity)) url += $"&min_security={Uri.EscapeDataString(minSecurity)}";
+        var response = await AuthenticatedGetAsync(url, ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<SkillsResponse>(body, _jsonOpts);
+    }
+
+    // ── Claws ─────────────────────────────────────────────────────
+
+    public async Task<ClawsListResponse?> GetClawsAsync(CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync("/api/claws", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<ClawsListResponse>(body, _jsonOpts);
+    }
+
+    public async Task<ClawItem?> GetClawDetailAsync(string clawId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/claws/{clawId}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<ClawItem>(body, _jsonOpts);
+    }
+
+    public async Task<(bool Success, ClawItem? Result, string? Error)> DeployClawAsync(
+        string name, string? instructions, string? githubRepo,
+        string clawType, string agentType, string pbToken, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, object?> { ["name"] = name, ["claw_type"] = clawType, ["agent_type"] = agentType };
+        if (!string.IsNullOrEmpty(instructions)) payload["instructions"] = instructions;
+        if (!string.IsNullOrEmpty(githubRepo)) payload["github_repo"] = githubRepo;
+
+        // Claws API uses PocketBase token, not agent JWT
+        try
+        {
+            await _auth.EnsureAuthenticatedAsync(ct);
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{GatherBaseUrl}/api/claws");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", pbToken);
+            request.Content = System.Net.Http.Json.JsonContent.Create(payload, options: _jsonOpts);
+            var response = await _http.SendAsync(request, ct);
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(ct);
+                try { return (true, JsonSerializer.Deserialize<ClawItem>(body, _jsonOpts), null); }
+                catch { return (true, null, null); }
+            }
+            var error = await response.Content.ReadAsStringAsync(ct);
+            return (false, null, ParseApiError(error, (int)response.StatusCode));
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { return (false, null, ex.Message); }
+    }
+
+    // ── Shop Orders ──────────────────────────────────────────────
+
+    public async Task<ProductOptionsResponse?> GetProductOptionsAsync(string productId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/products/{Uri.EscapeDataString(productId)}/options", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<ProductOptionsResponse>(body, _jsonOpts);
+    }
+
+    public async Task<(bool Success, OrderCreateResponse? Result, string? Error)> CreateOrderAsync(
+        ProductOrderRequest order, CancellationToken ct)
+    {
+        var response = await AuthenticatedPostAsync("/api/order/product", order, ct);
+        if (response is null) return (false, null, "Network error");
+        if (response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            try { return (true, JsonSerializer.Deserialize<OrderCreateResponse>(body, _jsonOpts), null); }
+            catch { return (true, null, null); }
+        }
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, null, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    public async Task<(bool Success, OrderPaymentResponse? Result, string? Error)> PayOrderAsync(
+        string orderId, string txId, CancellationToken ct)
+    {
+        var payload = new Dictionary<string, string> { ["tx_id"] = txId };
+        var response = await AuthenticatedPutWithBodyAsync($"/api/order/{orderId}/payment", payload, ct);
+        if (response is null) return (false, null, "Network error");
+        if (response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            try { return (true, JsonSerializer.Deserialize<OrderPaymentResponse>(body, _jsonOpts), null); }
+            catch { return (true, null, null); }
+        }
+        var error = await response.Content.ReadAsStringAsync(ct);
+        return (false, null, ParseApiError(error, (int)response.StatusCode));
+    }
+
+    public async Task<OrderStatusResponse?> GetOrderStatusAsync(string orderId, CancellationToken ct)
+    {
+        var response = await AuthenticatedGetAsync($"/api/order/{orderId}", ct);
+        if (response is null || !response.IsSuccessStatusCode) return null;
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return JsonSerializer.Deserialize<OrderStatusResponse>(body, _jsonOpts);
     }
 
     // ── Channel Details ─────────────────────────────────────────

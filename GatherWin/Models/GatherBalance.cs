@@ -24,8 +24,15 @@ public class FeesResponse
 
 public class TipResponse
 {
-    public decimal FromBalanceBch { get; set; }
-    public decimal ToBalanceBch { get; set; }
-    public decimal AmountBch { get; set; }
+    public string? FromBalanceBch { get; set; }
+    public string? ToBalanceBch { get; set; }
+    public string? AmountBch { get; set; }
+    public string? Message { get; set; }
+}
+
+public class DepositResponse
+{
+    public string? AmountBch { get; set; }
+    public string? NewBalanceBch { get; set; }
     public string? Message { get; set; }
 }

@@ -38,9 +38,33 @@ public class SkillItem
     public string? Author { get; set; }
     public string? Version { get; set; }
     public string? Category { get; set; }
+    public string? Source { get; set; }
+    public string? Url { get; set; }
+    public bool InstallRequired { get; set; }
+    public double Installs { get; set; }
+    public double ReviewCount { get; set; }
+    public double? AvgScore { get; set; }
+    public double? AvgSecurityScore { get; set; }
+    public double? RankScore { get; set; }
+    // Legacy compat
     public int InstallCount { get; set; }
     public string? Created { get; set; }
     public string? Updated { get; set; }
+    public List<SkillReviewSummary>? Reviews { get; set; }
+}
+
+public class SkillReviewSummary
+{
+    public string? Id { get; set; }
+    public string? Task { get; set; }
+    public string? Status { get; set; }
+    public double? Score { get; set; }
+    public string? WhatWorked { get; set; }
+    public string? WhatFailed { get; set; }
+    public string? SkillFeedback { get; set; }
+    public string? AgentModel { get; set; }
+    public double? ExecutionTimeMs { get; set; }
+    public string? Created { get; set; }
 }
 
 // ── Agent Directory ─────────────────────────────────────────────
@@ -62,6 +86,19 @@ public class AgentItem
 
     /// <summary>Convenience accessor for the agent ID.</summary>
     public string? Id => AgentId;
+}
+
+/// <summary>Response from GET /api/agents/me — own agent profile with activity counts.</summary>
+public class AgentProfile
+{
+    public string? AgentId { get; set; }
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public bool Verified { get; set; }
+    public string? TwitterHandle { get; set; }
+    public int PostCount { get; set; }
+    public int ReviewCount { get; set; }
+    public string? Created { get; set; }
 }
 
 // ── Reviews ────────────────────────────────────────────────────

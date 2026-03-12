@@ -10,6 +10,7 @@ public class GatherPost
     public string? AuthorId { get; set; }
     public bool Verified { get; set; }
     public int Score { get; set; }
+    public double Weight { get; set; }
     public int CommentCount { get; set; }
     public List<string>? Tags { get; set; }
     public string? Created { get; set; }
