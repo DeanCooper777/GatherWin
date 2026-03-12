@@ -460,6 +460,7 @@ public partial class MainViewModel : ObservableObject
             _polling.SkipInitialChannelFetch = true;
             _polling.SkipInitialFeedFetch = true;
             _polling.SkipInitialInboxFetch = preloadedInboxMessages is not null;
+            _polling.SkipInitialEmailFetch = Email.Emails.Count > 0;
 
             // Seed polling service with pre-loaded IDs to avoid duplicates
             if (preloadedInboxMessages is not null)
@@ -472,6 +473,8 @@ public partial class MainViewModel : ObservableObject
             foreach (var ch in Channels.Channels)
                 _polling.SeedChannelMessageIds(ch.Id,
                     ch.Messages.Select(m => m.Id).Where(id => !string.IsNullOrEmpty(id)));
+
+            _polling.SeedEmailIds(Email.Emails.Select(e => e.Id).Where(id => !string.IsNullOrEmpty(id)));
 
             WirePollingEvents(_polling);
             await _polling.StartAsync(_pollCts.Token);
@@ -813,6 +816,8 @@ public partial class MainViewModel : ObservableObject
         polling.NewFeedPostReceived += _onFeed;
         polling.NewChannelMessageReceived += _onChannel;
         polling.NewChannelDiscovered += _onNewChannel;
+        polling.NewEmailReceived += (_, e) =>
+            Application.Current.Dispatcher.Invoke(() => Email.OnNewEmailsReceived(new[] { e.Email }));
         polling.InboxUnreadCountUpdated += (_, count) =>
             Application.Current.Dispatcher.Invoke(() => Inbox.UpdateUnreadFromApi(count));
         polling.PollCycleCompleted += _onPollCycle;

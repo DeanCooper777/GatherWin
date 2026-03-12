@@ -24,6 +24,7 @@ public class PollingService
     private readonly Dictionary<string, HashSet<string>> _seenChannelMessageIds = new();
     private readonly Dictionary<string, string> _channelNames = new();
     private readonly HashSet<string> _knownChannelIds = new();
+    private readonly HashSet<string> _seenEmailIds = new();
     private DateTimeOffset _feedSinceTimestamp;
     // Channel polling does not use a `since` timestamp — see CheckChannelsAsync for details.
     /// <summary>
@@ -43,6 +44,7 @@ public class PollingService
     public event EventHandler<int>? InboxUnreadCountUpdated;
     public event EventHandler<DateTimeOffset>? PollCycleCompleted;
     public event EventHandler<string>? PollError;
+    public event EventHandler<NewEmailEventArgs>? NewEmailReceived;
 
     public bool IsRunning => _pollingTask is not null && !_pollingTask.IsCompleted;
     public int CurrentIntervalSeconds => (int)_pollInterval.TotalSeconds;
@@ -57,6 +59,17 @@ public class PollingService
     /// <summary>When true, seed polls skip inbox fetch. First real poll syncs IDs without emitting.</summary>
     public bool SkipInitialInboxFetch { get; set; }
     private bool _inboxSyncPending;
+
+    /// <summary>When true, seed polls skip email fetch. First real poll syncs IDs without emitting.</summary>
+    public bool SkipInitialEmailFetch { get; set; }
+    private bool _emailSyncPending;
+
+    /// <summary>Seed seen email IDs so pre-loaded emails aren't duplicated.</summary>
+    public void SeedEmailIds(IEnumerable<string?> ids)
+    {
+        foreach (var id in ids)
+            if (id is not null) _seenEmailIds.Add(id);
+    }
 
     /// <summary>Seed the seen-feed-post-IDs set so pre-loaded posts aren't duplicated.</summary>
     public void SeedFeedPostIds(IEnumerable<string> ids)
@@ -170,6 +183,7 @@ public class PollingService
         await CheckInboxAsync(ct);
         await CheckFeedAsync(ct);
         await CheckChannelsAsync(ct);
+        await CheckEmailAsync(ct);
 
         if (IsSeeding)
         {
@@ -537,6 +551,49 @@ public class PollingService
         // and rely on seenIds for dedup (the Gather API's `since` filter is unreliable).
     }
 
+    // ── Email Monitoring ────────────────────────────────────────
+
+    private async Task CheckEmailAsync(CancellationToken ct)
+    {
+        if (IsSeeding && SkipInitialEmailFetch)
+        {
+            _emailSyncPending = true;
+            return;
+        }
+
+        var isSyncPoll = _emailSyncPending;
+        if (isSyncPoll) _emailSyncPending = false;
+
+        GatherWin.Models.EmailListResponse? response;
+        try
+        {
+            response = await _api.GetEmailsAsync(ct, direction: "inbox");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Poll: email check failed", ex);
+            return;
+        }
+
+        if (response?.Emails is null) return;
+
+        if (IsSeeding || isSyncPoll)
+        {
+            foreach (var e in response.Emails)
+                if (e.Id is not null) _seenEmailIds.Add(e.Id);
+            return;
+        }
+
+        foreach (var email in response.Emails)
+        {
+            if (email.Id is null) continue;
+            if (!_seenEmailIds.Add(email.Id)) continue;
+
+            AppLogger.Log("Poll", $"New email from {email.FromAddr}: {email.Subject}");
+            NewEmailReceived?.Invoke(this, new NewEmailEventArgs { Email = email });
+        }
+    }
+
     private static DateTimeOffset ParseTimestamp(string? ts)
     {
         if (ts is not null && DateTimeOffset.TryParse(ts, out var dto))
@@ -612,4 +669,9 @@ public class NewChannelDiscoveredEventArgs : EventArgs
     public required string ChannelName { get; init; }
     public required string Description { get; init; }
     public int MemberCount { get; init; }
+}
+
+public class NewEmailEventArgs : EventArgs
+{
+    public required GatherWin.Models.EmailItem Email { get; init; }
 }

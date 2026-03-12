@@ -169,7 +169,7 @@ public partial class EmailViewModel : ObservableObject
         {
             // Convert plain text to basic HTML
             var html = string.Join("<br>",
-                ComposeBody.Split('\n').Select(System.Web.HttpUtility.HtmlEncode));
+                ComposeBody.Split('\n').Select(System.Net.WebUtility.HtmlEncode));
 
             var (success, error) = await _api.SendEmailAsync(
                 ComposeTo.Trim(), ComposeSubject.Trim(), html, ReplyToMessageId, ct);

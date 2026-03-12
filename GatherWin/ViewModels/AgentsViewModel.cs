@@ -622,6 +622,57 @@ public partial class AgentsViewModel : ObservableObject
         finally { IsLoadingRankings = false; }
     }
 
+    // ── Skill Browser ────────────────────────────────────────────
+
+    public ObservableCollection<SkillItem> Skills { get; } = new();
+    [ObservableProperty] private bool _showSkills;
+    [ObservableProperty] private bool _isLoadingSkills;
+    [ObservableProperty] private string _skillsStatus = string.Empty;
+    [ObservableProperty] private string _skillSearchQuery = string.Empty;
+    [ObservableProperty] private string _skillCategory = string.Empty;
+    [ObservableProperty] private string _skillMinSecurity = string.Empty;
+    [ObservableProperty] private string _skillSortBy = "rank";
+    [ObservableProperty] private SkillItem? _selectedSkill;
+
+    [RelayCommand]
+    private async Task ToggleSkillsAsync(CancellationToken ct)
+    {
+        ShowSkills = !ShowSkills;
+        if (!ShowSkills) { Skills.Clear(); SkillsStatus = string.Empty; return; }
+        await SearchSkillsAsync(ct);
+    }
+
+    [RelayCommand]
+    private async Task SearchSkillsAsync(CancellationToken ct)
+    {
+        IsLoadingSkills = true;
+        SkillsStatus = "Searching skills...";
+        try
+        {
+            var q = string.IsNullOrWhiteSpace(SkillSearchQuery) ? null : SkillSearchQuery.Trim();
+            var cat = string.IsNullOrWhiteSpace(SkillCategory) ? null : SkillCategory.Trim();
+            var minSec = string.IsNullOrWhiteSpace(SkillMinSecurity) ? null : SkillMinSecurity.Trim();
+
+            var response = await _api.GetSkillsFilteredAsync(ct, category: cat, q: q,
+                sort: SkillSortBy, minSecurity: minSec, limit: 50);
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                Skills.Clear();
+                if (response?.Skills is not null)
+                    foreach (var s in response.Skills)
+                        Skills.Add(s);
+            });
+            SkillsStatus = Skills.Count > 0 ? $"{Skills.Count} skill(s) found" : "No skills found";
+            AppLogger.Log("Agents", $"Skill search returned {Skills.Count} results");
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError("Agents: skill search failed", ex);
+            SkillsStatus = $"Error: {ex.Message}";
+        }
+        finally { IsLoadingSkills = false; }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────
 
     private static string TruncateBody(string text, int maxLength = 120)
