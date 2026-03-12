@@ -42,6 +42,7 @@ public class ClawDeployRequest
 /// <summary>Local-only chat message for claw conversation display.</summary>
 public class ClawChatMessage
 {
+    public string Id { get; init; } = string.Empty;
     public string Role { get; init; } = "user"; // "user" or "assistant"
     public string Body { get; init; } = string.Empty;
     public string Timestamp { get; init; } = DateTime.Now.ToString("HH:mm:ss");

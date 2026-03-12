@@ -197,14 +197,9 @@ public partial class ClawsViewModel : ObservableObject
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            // Find the messages array — could be root array, or root.messages, or root.data
-            JsonElement arr = default;
-            if (root.ValueKind == JsonValueKind.Array)
-                arr = root;
-            else if (root.TryGetProperty("messages", out var m))
-                arr = m;
-            else if (root.TryGetProperty("data", out var d))
-                arr = d;
+            JsonElement arr = root.ValueKind == JsonValueKind.Array ? root
+                : root.TryGetProperty("messages", out var m) ? m
+                : default;
 
             if (arr.ValueKind != JsonValueKind.Array) return;
 
@@ -213,14 +208,18 @@ public partial class ClawsViewModel : ObservableObject
                 if (clearFirst) ChatMessages.Clear();
                 foreach (var item in arr.EnumerateArray())
                 {
-                    var role = TryGetString(item, "role") ?? "user";
-                    var body = TryGetString(item, "message") ?? TryGetString(item, "content")
-                               ?? TryGetString(item, "body") ?? string.Empty;
-                    var created = TryGetString(item, "created") ?? TryGetString(item, "timestamp") ?? string.Empty;
+                    var id = TryGetString(item, "id") ?? string.Empty;
+                    var authorId = TryGetString(item, "author_id") ?? string.Empty;
+                    var body = TryGetString(item, "body") ?? string.Empty;
+                    var created = TryGetString(item, "created") ?? string.Empty;
 
                     if (string.IsNullOrEmpty(body)) continue;
+                    if (ChatMessages.Any(m => m.Id == id && id.Length > 0)) continue;
 
-                    ChatMessages.Add(new ClawChatMessage { Role = role, Body = body, Timestamp = created });
+                    // author_id starts with "user:" for user messages, otherwise it's the claw
+                    var role = authorId.StartsWith("user:") ? "user" : "assistant";
+
+                    ChatMessages.Add(new ClawChatMessage { Id = id, Role = role, Body = body, Timestamp = created });
 
                     if (!string.IsNullOrEmpty(created) &&
                         DateTimeOffset.TryParse(created, out var ts) &&
@@ -253,11 +252,22 @@ public partial class ClawsViewModel : ObservableObject
         try
         {
             var (ok, err) = await _api.PostClawMessageAsync(SelectedClaw.Id, msg, PbToken.Trim(), ct);
-            if (!ok) { ChatError = err; return; }
+            if (!ok)
+            {
+                ChatError = err?.Contains("502") == true
+                    ? "Claw failed to respond (agent error — try restarting it on gather.is)"
+                    : err;
+                return;
+            }
 
-            // Poll for the reply
-            await Task.Delay(1500, ct);
-            await LoadClawMessagesAsync(SelectedClaw, _lastMessageTime, ct);
+            // Poll a few times for the claw's reply
+            for (int i = 0; i < 6; i++)
+            {
+                await Task.Delay(2000, ct);
+                var before = ChatMessages.Count;
+                await LoadClawMessagesAsync(SelectedClaw, _lastMessageTime, ct);
+                if (ChatMessages.Count > before) break; // got a reply
+            }
         }
         catch (Exception ex)
         {
