@@ -748,6 +748,13 @@ public partial class MainWindow : Window
 
     private GatherLoginWindow? _loginWindow;
 
+    private void ClaudeModelCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.ComboBox cb &&
+            cb.SelectedValue is string modelId)
+            _viewModel.Claude.SetModel(modelId);
+    }
+
     private void ClawsWebLogin_Click(object sender, RoutedEventArgs e)
     {
         if (_loginWindow is not null && _loginWindow.IsLoaded)

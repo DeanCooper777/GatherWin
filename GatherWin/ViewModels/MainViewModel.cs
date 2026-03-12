@@ -74,6 +74,7 @@ public partial class MainViewModel : ObservableObject
     public AgentsViewModel Agents { get; }
     public ShopViewModel Shop { get; }
     public ClawsViewModel Claws { get; }
+    public ClaudeViewModel Claude { get; }
     public ObservableCollection<ActivityItem> AllActivity { get; } = new();
 
     public string AgentId => _agentId;
@@ -112,6 +113,7 @@ public partial class MainViewModel : ObservableObject
         Agents = new AgentsViewModel(api);
         Shop = new ShopViewModel(api);
         Claws = new ClawsViewModel(api);
+        Claude = new ClaudeViewModel(claudeApiKey);
 
         // Apply saved post display preference
         _api.ShowFullPosts = WhatsNew.Options.ShowFullPosts;
