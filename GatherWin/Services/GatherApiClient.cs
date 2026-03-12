@@ -999,7 +999,7 @@ public class GatherApiClient
 
     public async Task<(bool Success, string? Error)> PostClawMessageAsync(string clawId, string message, string pbToken, CancellationToken ct)
     {
-        var payload = new Dictionary<string, string> { ["message"] = message };
+        var payload = new Dictionary<string, string> { ["body"] = message };
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{GatherBaseUrl}/api/claws/{clawId}/messages")
         {
             Headers = { Authorization = new AuthenticationHeaderValue("Bearer", pbToken) },
