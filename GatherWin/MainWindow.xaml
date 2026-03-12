@@ -3472,53 +3472,43 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Claws list -->
-                    <Border Grid.Row="3" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" Background="White">
-                        <Grid>
-                            <ListBox ItemsSource="{Binding Claws.Claws}"
-                                     SelectedItem="{Binding Claws.SelectedClaw}"
-                                     BorderThickness="0" Background="Transparent"
-                                     HorizontalContentAlignment="Stretch"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Margin="4,4,4,0" Padding="12,10" CornerRadius="6"
-                                                Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="1">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Grid.Column="0">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Bold"
-                                                                   Foreground="#2C3E50"/>
-                                                        <TextBlock Text="{Binding ClawType}" FontSize="10"
-                                                                   Foreground="#777" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                                                        <TextBlock Text="{Binding AgentType}" FontSize="10"
-                                                                   Foreground="#999" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    <!-- Claws list + Chat panel -->
+                    <Grid Grid.Row="3">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left: claw list -->
+                        <Border Grid.Column="0" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" Background="White">
+                            <Grid>
+                                <ListBox ItemsSource="{Binding Claws.Claws}"
+                                         SelectedItem="{Binding Claws.SelectedClaw}"
+                                         BorderThickness="0" Background="Transparent"
+                                         HorizontalContentAlignment="Stretch"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="4,4,4,0" Padding="10,8" CornerRadius="5"
+                                                    Background="#FAFAFA" BorderBrush="#E0E0E0" BorderThickness="1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="Bold"
+                                                                   Foreground="#2C3E50" TextTrimming="CharacterEllipsis"/>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                            <TextBlock Text="{Binding ClawType}" FontSize="10"
+                                                                       Foreground="#777"/>
+                                                            <TextBlock Text=" · " FontSize="10" Foreground="#999"/>
+                                                            <TextBlock Text="{Binding AgentType}" FontSize="10"
+                                                                       Foreground="#999"/>
+                                                        </StackPanel>
                                                     </StackPanel>
-                                                    <TextBlock Text="{Binding Instructions}" FontSize="11" Foreground="#555"
-                                                               TextTrimming="CharacterEllipsis" MaxWidth="400"
-                                                               Margin="0,2,0,0"
-                                                               Visibility="{Binding Instructions, Converter={StaticResource NotNullToVis}}"/>
-                                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                        <TextBlock Text="URL: " FontSize="10" Foreground="#777"/>
-                                                        <TextBlock Text="{Binding Url}" FontSize="10" Foreground="#3498DB"
-                                                                   TextTrimming="CharacterEllipsis" MaxWidth="300"
-                                                                   Visibility="{Binding Url, Converter={StaticResource NotNullToVis}}"/>
-                                                    </StackPanel>
-                                                    <TextBlock FontSize="10" Foreground="#999" Margin="0,2,0,0">
-                                                        <Run Text="Heartbeat: "/>
-                                                        <Run Text="{Binding HeartbeatInterval, Mode=OneWay}"/>
-                                                        <Run Text="min"/>
-                                                    </TextBlock>
-                                                    <TextBlock Text="{Binding ErrorMessage}" FontSize="10" Foreground="#E74C3C"
-                                                               TextWrapping="Wrap" Margin="0,2,0,0"
-                                                               Visibility="{Binding ErrorMessage, Converter={StaticResource NotNullToVis}}"/>
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="12,0,0,0">
-                                                    <Border CornerRadius="4" Padding="8,3" HorizontalAlignment="Right">
+                                                    <Border Grid.Column="1" CornerRadius="3" Padding="6,2" VerticalAlignment="Top">
                                                         <Border.Style>
                                                             <Style TargetType="Border">
                                                                 <Setter Property="Background" Value="#F39C12"/>
@@ -3536,44 +3526,146 @@
                                                             </Style>
                                                         </Border.Style>
                                                         <TextBlock Text="{Binding Status}" Foreground="White"
-                                                                   FontSize="10" FontWeight="SemiBold"/>
+                                                                   FontSize="9" FontWeight="SemiBold"/>
                                                     </Border>
-                                                    <TextBlock FontSize="10" Foreground="#27AE60" Margin="0,4,0,0"
-                                                               HorizontalAlignment="Right"
-                                                               Visibility="{Binding Paid, Converter={StaticResource BoolToVis}}">
-                                                        ✓ Paid
-                                                    </TextBlock>
-                                                    <TextBlock FontSize="10" Foreground="#F39C12" Margin="0,4,0,0"
-                                                               HorizontalAlignment="Right"
-                                                               Visibility="{Binding IsPublic, Converter={StaticResource BoolToVis}}">
-                                                        Public
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
 
-                            <!-- Empty state -->
-                            <TextBlock FontSize="12" Foreground="#999" FontStyle="Italic"
+                                <!-- Empty state -->
+                                <TextBlock Text="No claws deployed. Click 'Deploy Claw' to get started."
+                                           FontSize="11" Foreground="#999" FontStyle="Italic"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           TextWrapping="Wrap" TextAlignment="Center" Padding="16"
+                                           IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Claws.Claws.Count}" Value="0">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </Border>
+
+                        <!-- Right: chat panel -->
+                        <Border Grid.Column="2" BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="4" Background="White">
+                            <Grid>
+
+                            <!-- No claw selected -->
+                            <TextBlock Text="Select a claw to start chatting"
+                                       FontSize="13" Foreground="#999" FontStyle="Italic"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       TextWrapping="Wrap" TextAlignment="Center" Padding="20"
-                                       IsHitTestVisible="False">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="No claws deployed. Click 'Deploy Claw' to get started."/>
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Claws.Claws.Count}" Value="0">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Grid>
-                    </Border>
+                                       Visibility="{Binding Claws.SelectedClaw, Converter={StaticResource NullToVis}}"/>
+
+                            <!-- Chat panel (shown when claw selected) -->
+                            <Grid Visibility="{Binding Claws.SelectedClaw, Converter={StaticResource NotNullToVis}}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Chat header -->
+                                <Border Grid.Row="0" Background="#F8F9FA" Padding="12,8"
+                                        BorderBrush="#DEE2E6" BorderThickness="0,0,0,1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Claws.SelectedClaw.Name}"
+                                                       FontSize="14" FontWeight="Bold" Foreground="#2C3E50"/>
+                                            <TextBlock Text="{Binding Claws.SelectedClaw.Instructions}"
+                                                       FontSize="11" Foreground="#666" TextTrimming="CharacterEllipsis"
+                                                       Visibility="{Binding Claws.SelectedClaw.Instructions, Converter={StaticResource NotNullToVis}}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Loading..." FontSize="11" Foreground="#999"
+                                                       VerticalAlignment="Center" Margin="0,0,8,0"
+                                                       Visibility="{Binding Claws.IsChatLoading, Converter={StaticResource BoolToVis}}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Messages -->
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                              x:Name="ClawChatScroller">
+                                    <ItemsControl ItemsSource="{Binding Claws.ChatMessages}" Padding="8,4">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="4,3" Padding="10,7" CornerRadius="6">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#F0F4FF"/>
+                                                            <Setter Property="HorizontalAlignment" Value="Left"/>
+                                                            <Setter Property="MaxWidth" Value="480"/>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding AuthorName}"
+                                                                   FontSize="10" FontWeight="SemiBold"
+                                                                   Foreground="#8E44AD" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="{Binding Body}"
+                                                                   FontSize="12" TextWrapping="Wrap"
+                                                                   Foreground="#2C3E50"/>
+                                                        <TextBlock Text="{Binding Created}"
+                                                                   FontSize="9" Foreground="#999"
+                                                                   HorizontalAlignment="Right" Margin="0,2,0,0"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <!-- Error bar -->
+                                <Border Grid.Row="2" Background="#FDECEA" Padding="8,4"
+                                        Visibility="{Binding Claws.ChatError, Converter={StaticResource NotNullToVis}}">
+                                    <TextBlock Text="{Binding Claws.ChatError}"
+                                               FontSize="11" Foreground="#C0392B" TextWrapping="Wrap"/>
+                                </Border>
+
+                                <!-- Input area -->
+                                <Border Grid.Row="3" Background="#F8F9FA" Padding="8"
+                                        BorderBrush="#DEE2E6" BorderThickness="0,1,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding Claws.ChatInput, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="12" Padding="8,6" BorderBrush="#CCC" BorderThickness="1"
+                                                 VerticalContentAlignment="Center"
+                                                 AcceptsReturn="False" TextWrapping="Wrap"
+                                                 ToolTip="Type a message and press Send">
+                                            <TextBox.InputBindings>
+                                                <KeyBinding Key="Return"
+                                                            Command="{Binding Claws.SendClawMessageCommand}"/>
+                                            </TextBox.InputBindings>
+                                        </TextBox>
+                                        <Button Grid.Column="1" Content="Send"
+                                                Command="{Binding Claws.SendClawMessageCommand}"
+                                                Background="#8E44AD" Foreground="White"
+                                                Padding="14,6" Margin="6,0,0,0"
+                                                FontSize="12" FontWeight="SemiBold" BorderThickness="0"
+                                                Cursor="Hand"
+                                                IsEnabled="{Binding Claws.IsSendingChat, Converter={StaticResource InverseBool}}"/>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
                 </Grid>
             </TabItem>
 

@@ -10,6 +10,7 @@ namespace GatherWin.ViewModels;
 public partial class ClawsViewModel : ObservableObject
 {
     private readonly GatherApiClient _api;
+    private readonly Dictionary<string, string> _clawChannelMap = new(); // clawId → channelId
 
     public ObservableCollection<ClawItem> Claws { get; } = new();
 
@@ -34,10 +35,34 @@ public partial class ClawsViewModel : ObservableObject
 
     [ObservableProperty] private bool _showPbTokenHelp;
 
+    // ── Claw Chat ─────────────────────────────────────────────────
+
+    public ObservableCollection<ChannelMessage> ChatMessages { get; } = new();
+
+    [ObservableProperty] private string _chatChannelId = string.Empty;
+    [ObservableProperty] private string _chatInput = string.Empty;
+    [ObservableProperty] private bool _isChatLoading;
+    [ObservableProperty] private bool _isSendingChat;
+    [ObservableProperty] private string? _chatError;
+
     public ClawsViewModel(GatherApiClient api)
     {
         _api = api;
     }
+
+    partial void OnSelectedClawChanged(ClawItem? value)
+    {
+        if (value is null)
+        {
+            ChatMessages.Clear();
+            ChatChannelId = string.Empty;
+            ChatError = null;
+            return;
+        }
+        _ = LoadClawChatAsync(value, CancellationToken.None);
+    }
+
+    // ── Claw list ─────────────────────────────────────────────────
 
     [RelayCommand]
     public async Task LoadClawsAsync(CancellationToken ct)
@@ -77,6 +102,8 @@ public partial class ClawsViewModel : ObservableObject
         }
         finally { IsLoading = false; }
     }
+
+    // ── Deploy form ───────────────────────────────────────────────
 
     [RelayCommand]
     private void OpenDeployForm()
@@ -147,6 +174,128 @@ public partial class ClawsViewModel : ObservableObject
         }
         finally { IsDeploying = false; }
     }
+
+    // ── Chat ──────────────────────────────────────────────────────
+
+    private async Task LoadClawChatAsync(ClawItem claw, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(claw.AgentId))
+        {
+            ChatError = "This claw has no agent ID — cannot open chat";
+            return;
+        }
+
+        IsChatLoading = true;
+        ChatError = null;
+        Application.Current.Dispatcher.Invoke(ChatMessages.Clear);
+        ChatChannelId = string.Empty;
+
+        try
+        {
+            if (!_clawChannelMap.TryGetValue(claw.Id!, out var channelId))
+            {
+                channelId = await FindOrCreateClawChannelAsync(claw, ct);
+                if (channelId is null) return;
+                _clawChannelMap[claw.Id!] = channelId;
+            }
+
+            ChatChannelId = channelId;
+            await RefreshChatMessagesAsync(channelId, ct);
+        }
+        catch (Exception ex)
+        {
+            ChatError = ex.Message;
+            AppLogger.LogError("ClawChat: load failed", ex);
+        }
+        finally { IsChatLoading = false; }
+    }
+
+    private async Task<string?> FindOrCreateClawChannelAsync(ClawItem claw, CancellationToken ct)
+    {
+        var channelName = $"Claw: {claw.Name}";
+
+        // Look for an existing channel with this name
+        var list = await _api.GetChannelsAsync(ct);
+        var existing = list?.Channels?.FirstOrDefault(c => c.Name == channelName);
+        if (existing?.Id is not null)
+        {
+            AppLogger.Log("ClawChat", $"Found existing channel '{channelName}' ({existing.Id})");
+            return existing.Id;
+        }
+
+        // Create a new private channel
+        var (ok, channelId, err) = await _api.CreateChannelAsync(
+            channelName, $"Chat with claw {claw.Name}", ct);
+
+        if (!ok || channelId is null)
+        {
+            ChatError = err ?? "Failed to create chat channel";
+            return null;
+        }
+
+        AppLogger.Log("ClawChat", $"Created channel '{channelName}' ({channelId})");
+
+        // Invite the claw's agent
+        var (inviteOk, inviteErr) = await _api.InviteToChannelAsync(channelId, claw.AgentId!, ct);
+        if (!inviteOk)
+            AppLogger.LogError($"ClawChat: invite failed — {inviteErr}", null);
+
+        return channelId;
+    }
+
+    private async Task RefreshChatMessagesAsync(string channelId, CancellationToken ct)
+    {
+        var msgs = await _api.GetChannelMessagesAsync(channelId, null, ct);
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            ChatMessages.Clear();
+            if (msgs?.Messages is not null)
+                foreach (var m in msgs.Messages)
+                    ChatMessages.Add(m);
+        });
+        AppLogger.Log("ClawChat", $"Loaded {msgs?.Messages?.Count ?? 0} messages from {channelId}");
+    }
+
+    [RelayCommand]
+    private async Task SendClawMessageAsync(CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(ChatInput) || string.IsNullOrWhiteSpace(ChatChannelId))
+            return;
+
+        var msg = ChatInput.Trim();
+        ChatInput = string.Empty;
+        IsSendingChat = true;
+        ChatError = null;
+
+        try
+        {
+            var (ok, err) = await _api.PostChannelMessageAsync(ChatChannelId, msg, ct);
+            if (!ok)
+                ChatError = err ?? "Failed to send message";
+            else
+                await RefreshChatMessagesAsync(ChatChannelId, ct);
+        }
+        catch (Exception ex)
+        {
+            ChatError = ex.Message;
+            AppLogger.LogError("ClawChat: send failed", ex);
+        }
+        finally { IsSendingChat = false; }
+    }
+
+    /// <summary>Called by MainViewModel when a channel message arrives for the active chat channel.</summary>
+    public void OnNewChannelMessage(string channelId, ChannelMessage message)
+    {
+        if (channelId != ChatChannelId) return;
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            // Dedup by ID
+            if (message.Id is not null && ChatMessages.Any(m => m.Id == message.Id)) return;
+            ChatMessages.Add(message);
+        });
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────
 
     public static string FormatStatus(string? status) => status switch
     {
