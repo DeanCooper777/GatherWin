@@ -6,6 +6,7 @@
         xmlns:models="clr-namespace:GatherWin.Models"
         xmlns:vm="clr-namespace:GatherWin.ViewModels"
         xmlns:helpers="clr-namespace:GatherWin.Helpers"
+        xmlns:mdwpf="clr-namespace:Markdig.Wpf;assembly=Markdig.Wpf"
         Title="GatherWin v1.0 — OnTheEdgeOfReality"
         Width="900" Height="700"
         MinWidth="600" MinHeight="450"
@@ -4461,28 +4462,15 @@
                                                           SelectionChanged="ClaudeModelCombo_SelectionChanged"/>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <!-- Orchestrator toggle -->
-                                                <ToggleButton Content="Orchestrator"
-                                                              IsChecked="{Binding Claude.OrchestratorMode}"
-                                                              Padding="8,3" Margin="0,0,6,0"
-                                                              FontSize="10" FontWeight="SemiBold"
-                                                              Cursor="Hand">
-                                                    <ToggleButton.Style>
-                                                        <Style TargetType="ToggleButton">
-                                                            <Setter Property="Background" Value="#ECF0F1"/>
-                                                            <Setter Property="Foreground" Value="#7F8C8D"/>
-                                                            <Setter Property="BorderBrush" Value="#BDC3C7"/>
-                                                            <Setter Property="BorderThickness" Value="1"/>
-                                                            <Style.Triggers>
-                                                                <Trigger Property="IsChecked" Value="True">
-                                                                    <Setter Property="Background" Value="#8E44AD"/>
-                                                                    <Setter Property="Foreground" Value="White"/>
-                                                                    <Setter Property="BorderBrush" Value="#6C3483"/>
-                                                                </Trigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </ToggleButton.Style>
-                                                </ToggleButton>
+                                                <!-- Run agent terminal (only for CC agent conversations) -->
+                                                <Button Content="▶ Run"
+                                                        Command="{Binding Claude.RunAgentTerminalCommand}"
+                                                        Background="#27AE60" Foreground="White"
+                                                        Padding="8,3" Margin="0,0,6,0"
+                                                        FontSize="10" FontWeight="SemiBold"
+                                                        BorderThickness="0" Cursor="Hand"
+                                                        ToolTip="Spawn a terminal running cc_agent.py for this agent"
+                                                        Visibility="{Binding Claude.SelectedConversation.AgentId, Converter={StaticResource NotNullToVis}}"/>
                                                 <Button Content="System Prompt"
                                                         Command="{Binding Claude.ToggleSystemPromptCommand}"
                                                         Background="#7F8C8D" Foreground="White"
@@ -4575,6 +4563,7 @@
                                                                     </Style>
                                                                 </TextBlock.Style>
                                                             </TextBlock>
+                                                            <!-- Plain text for user and system messages -->
                                                             <TextBox Text="{Binding Body, Mode=OneWay}"
                                                                      IsReadOnly="True" BorderThickness="0"
                                                                      Background="Transparent" Padding="0"
@@ -4590,10 +4579,27 @@
                                                                                 <Setter Property="FontStyle" Value="Italic"/>
                                                                                 <Setter Property="Foreground" Value="#888"/>
                                                                             </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding IsAssistant}" Value="True">
+                                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
                                                                 </TextBox.Style>
                                                             </TextBox>
+                                                            <!-- Markdown renderer for assistant messages -->
+                                                            <mdwpf:MarkdownViewer
+                                                                Markdown="{Binding Body}">
+                                                                <mdwpf:MarkdownViewer.Style>
+                                                                    <Style TargetType="mdwpf:MarkdownViewer">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsAssistant}" Value="True">
+                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </mdwpf:MarkdownViewer.Style>
+                                                            </mdwpf:MarkdownViewer>
                                                             <TextBlock Text="{Binding Timestamp}"
                                                                        FontSize="9" Foreground="#999"
                                                                        HorizontalAlignment="Right" Margin="0,2,0,0">
@@ -4633,11 +4639,13 @@
                                                      Text="{Binding Claude.ChatInput, UpdateSourceTrigger=PropertyChanged}"
                                                      FontSize="12" Padding="8,6"
                                                      BorderBrush="#CCC" BorderThickness="1"
-                                                     VerticalContentAlignment="Center"
-                                                     AcceptsReturn="False" TextWrapping="Wrap"
-                                                     ToolTip="Type a message — Enter to send, Shift+Enter for newline">
+                                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                                     MinLines="4" MaxLines="4"
+                                                     VerticalScrollBarVisibility="Auto"
+                                                     SpellCheck.IsEnabled="True"
+                                                     ToolTip="Type a message — Ctrl+Enter to send">
                                                 <TextBox.InputBindings>
-                                                    <KeyBinding Key="Return" Modifiers=""
+                                                    <KeyBinding Key="Return" Modifiers="Ctrl"
                                                                 Command="{Binding Claude.SendMessageCommand}"/>
                                                 </TextBox.InputBindings>
                                             </TextBox>
@@ -4647,6 +4655,7 @@
                                                     Padding="14,6" Margin="6,0,0,0"
                                                     FontSize="12" FontWeight="SemiBold"
                                                     BorderThickness="0" Cursor="Hand"
+                                                    VerticalAlignment="Top"
                                                     IsEnabled="{Binding Claude.IsSendingChat, Converter={StaticResource InverseBool}}"/>
                                         </Grid>
                                     </Border>

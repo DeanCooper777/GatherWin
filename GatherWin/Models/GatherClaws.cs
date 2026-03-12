@@ -46,8 +46,9 @@ public class ClawChatMessage
     public string Role { get; init; } = "user"; // "user" | "assistant" | "system"
     public string Body { get; init; } = string.Empty;
     public string Timestamp { get; init; } = DateTime.Now.ToString("HH:mm:ss");
-    public bool IsUser   => Role == "user";
-    public bool IsSystem => Role == "system";
+    public bool IsUser      => Role == "user";
+    public bool IsSystem    => Role == "system";
+    public bool IsAssistant => Role == "assistant";
 }
 
 public class ClawUpdateRequest

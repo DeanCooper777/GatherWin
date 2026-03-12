@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Markdig.Wpf" Version="0.5.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
@@ -20,6 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\cc_agent.py" Link="cc_agent.py" CopyToOutputDirectory="PreserveNewest" />
     <None Include="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('appsettings.Local.json')" />
   </ItemGroup>
 </Project>

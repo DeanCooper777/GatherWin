@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -319,9 +320,34 @@ public partial class ClaudeViewModel : ObservableObject
 
     [RelayCommand]
     private Task SendMessageAsync(CancellationToken ct) =>
-        OrchestratorMode && Agents.Count > 0
-            ? RunOrchestratedAsync(ChatInput.Trim(), ct)
-            : RunDirectAsync(ChatInput.Trim(), ct);
+        RunDirectAsync(ChatInput.Trim(), ct);
+
+    [RelayCommand]
+    private void RunAgentTerminal()
+    {
+        if (SelectedConversation?.AgentId is not { } agentId) return;
+        var agent = Agents.FirstOrDefault(a => a.Id == agentId);
+        if (agent is null) return;
+
+        var scriptPath = Path.Combine(AppContext.BaseDirectory, "cc_agent.py");
+        if (!File.Exists(scriptPath))
+        {
+            ChatError = $"cc_agent.py not found at: {scriptPath}";
+            return;
+        }
+
+        try
+        {
+            var args = $"/K title \"Agent: {agent.Name}\" && python \"{scriptPath}\" --agent-id \"{agentId}\" --port {_bridge.Port}";
+            Process.Start(new ProcessStartInfo { FileName = "cmd.exe", Arguments = args, UseShellExecute = true });
+            AppLogger.Log("AgentBridge", $"Spawned terminal for agent [{agent.Name}] id={agentId}");
+        }
+        catch (Exception ex)
+        {
+            ChatError = $"Failed to start terminal: {ex.Message}";
+            AppLogger.LogError("RunAgentTerminal failed", ex);
+        }
+    }
 
     // Direct (no tools) ───────────────────────────────────────────
 
@@ -413,7 +439,7 @@ public partial class ClaudeViewModel : ObservableObject
         try
         {
             var response = await _bridge.SendAndWaitAsync(
-                agent.Name, agent.SystemPrompt, msg, history, ct);
+                agent.Id, agent.Name, agent.SystemPrompt, msg, history, ct);
 
             var entry = new ClaudeChatEntry { Role = "assistant", Content = response };
             SelectedConversation.Messages.Add(entry);
