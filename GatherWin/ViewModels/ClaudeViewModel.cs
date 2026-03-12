@@ -13,6 +13,7 @@ namespace GatherWin.ViewModels;
 public partial class ClaudeViewModel : ObservableObject
 {
     private readonly ClaudeApiClient _claude;
+    private readonly AgentBridgeServer _bridge;
 
     private static readonly string ConversationsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -76,16 +77,22 @@ public partial class ClaudeViewModel : ObservableObject
     [ObservableProperty] private string _agentDescription = string.Empty;
     [ObservableProperty] private string _agentSystemPrompt = string.Empty;
     [ObservableProperty] private string _agentModel = "claude-sonnet-4-6";
+    [ObservableProperty] private bool _agentIsClaudeCode;
     [ObservableProperty] private string? _agentSaveStatus;
+
+    // Bridge status
+    [ObservableProperty] private string _bridgeStatus = "Bridge: starting…";
+    public bool BridgeRunning => _bridge.IsRunning;
 
     partial void OnSelectedAgentChanged(ClaudeAgent? value)
     {
         AgentSaveStatus = null;
         if (value is null) return;
-        AgentName = value.Name;
-        AgentDescription = value.Description;
-        AgentSystemPrompt = value.SystemPrompt;
-        AgentModel = value.Model;
+        AgentName          = value.Name;
+        AgentDescription   = value.Description;
+        AgentSystemPrompt  = value.SystemPrompt;
+        AgentModel         = value.Model;
+        AgentIsClaudeCode  = value.IsClaudeCodeAgent;
     }
 
     // ── Model selector ────────────────────────────────────────────
@@ -131,6 +138,13 @@ public partial class ClaudeViewModel : ObservableObject
     public ClaudeViewModel(string apiKey)
     {
         _claude = new ClaudeApiClient(apiKey);
+        _bridge = new AgentBridgeServer(7432);
+        _bridge.Start();
+        BridgeStatus = _bridge.IsRunning
+            ? $"Bridge: :7432"
+            : "Bridge: failed to start";
+        OnPropertyChanged(nameof(BridgeRunning));
+
         IsConfigured = _claude.IsConfigured;
         LoadConversations();
         LoadAgents();
@@ -261,10 +275,11 @@ public partial class ClaudeViewModel : ObservableObject
     private void SaveAgent()
     {
         if (SelectedAgent is null) return;
-        SelectedAgent.Name         = AgentName.Trim();
-        SelectedAgent.Description  = AgentDescription.Trim();
-        SelectedAgent.SystemPrompt = AgentSystemPrompt.Trim();
-        SelectedAgent.Model        = AgentModel;
+        SelectedAgent.Name             = AgentName.Trim();
+        SelectedAgent.Description      = AgentDescription.Trim();
+        SelectedAgent.SystemPrompt     = AgentSystemPrompt.Trim();
+        SelectedAgent.Model            = AgentModel;
+        SelectedAgent.IsClaudeCodeAgent = AgentIsClaudeCode;
         AgentSaveStatus = "Saved";
 
         // Refresh list so updated name appears — capture ref before removal
@@ -291,7 +306,8 @@ public partial class ClaudeViewModel : ObservableObject
         {
             Name         = $"Chat: {agent.Name}",
             Model        = agent.Model,
-            SystemPrompt = agent.SystemPrompt
+            SystemPrompt = agent.SystemPrompt,
+            AgentId      = agent.IsClaudeCodeAgent ? agent.Id : null
         };
         Conversations.Insert(0, conv);
         SelectedConversation = conv;
@@ -313,6 +329,18 @@ public partial class ClaudeViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(msg)) return;
         if (SelectedConversation is null) { ChatError = "No conversation selected"; return; }
+
+        // Route to Claude Code bridge if this conversation belongs to a CC agent
+        if (SelectedConversation.AgentId is not null)
+        {
+            var agent = Agents.FirstOrDefault(a => a.Id == SelectedConversation.AgentId);
+            if (agent?.IsClaudeCodeAgent == true)
+            {
+                await RunViaBridgeAsync(msg, agent, ct);
+                return;
+            }
+        }
+
         if (!IsConfigured) { ChatError = "Claude API key not configured — add it in Options"; return; }
 
         ChatInput = string.Empty;
@@ -357,6 +385,71 @@ public partial class ClaudeViewModel : ObservableObject
         catch (OperationCanceledException) { RemoveBubble(replyIdx); }
         catch (Exception ex) { ChatError = ex.Message; AppLogger.LogError("ClaudeTab: send failed", ex); }
         finally { IsSendingChat = false; }
+    }
+
+    // Bridge routing (Claude Code agent) ─────────────────────────
+
+    private async Task RunViaBridgeAsync(string msg, ClaudeAgent agent, CancellationToken ct)
+    {
+        ChatInput = string.Empty;
+        IsSendingChat = true;
+        ChatError = null;
+
+        if (SelectedConversation!.Messages.Count == 0 && SelectedConversation.Name.StartsWith("Chat:"))
+            SelectedConversation.Name = $"Chat: {agent.Name}";
+
+        // Build compact conversation history string for context
+        var history = BuildHistoryText(SelectedConversation.Messages);
+
+        var userEntry = new ClaudeChatEntry { Role = "user", Content = msg };
+        SelectedConversation.Messages.Add(userEntry);
+        Application.Current.Dispatcher.Invoke(() => DisplayMessages.Add(EntryToDisplay(userEntry)));
+
+        int replyIdx = AddPlaceholderBubble();
+        UpdateBubble(replyIdx, "⏳ Waiting for Claude Code...");
+        StatusText = $"Bridge: waiting for Claude Code to respond…";
+        AppLogger.Log("AgentBridge", $"Routing to CC agent [{agent.Name}]");
+
+        try
+        {
+            var response = await _bridge.SendAndWaitAsync(
+                agent.Name, agent.SystemPrompt, msg, history, ct);
+
+            var entry = new ClaudeChatEntry { Role = "assistant", Content = response };
+            SelectedConversation.Messages.Add(entry);
+            UpdateBubble(replyIdx, response);
+            BridgeStatus = $"Bridge: :7432";
+            RefreshStatusText();
+            SaveConversations();
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Bridge timeout (5 min) — not user cancel
+            RemoveBubble(replyIdx);
+            RemoveLastUserMessage(msg);
+            ChatError = "Timed out waiting for Claude Code (5 min). Is cc_agent.py running?";
+            BridgeStatus = $"Bridge: :7432 (timed out)";
+        }
+        catch (OperationCanceledException) { RemoveBubble(replyIdx); }
+        catch (Exception ex)
+        {
+            ChatError = ex.Message;
+            AppLogger.LogError("AgentBridge: RunViaBridge failed", ex);
+        }
+        finally { IsSendingChat = false; }
+    }
+
+    private static string BuildHistoryText(IEnumerable<ClaudeChatEntry> messages)
+    {
+        var entries = messages.ToList();
+        if (entries.Count == 0) return string.Empty;
+        var sb = new StringBuilder();
+        foreach (var e in entries)
+        {
+            var label = e.Role == "user" ? "User" : "Assistant";
+            sb.AppendLine($"{label}: {e.Content}");
+        }
+        return sb.ToString().TrimEnd();
     }
 
     // Orchestrated (with tools + agents) ─────────────────────────

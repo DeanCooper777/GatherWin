@@ -12,6 +12,8 @@ public class ClaudeConversation
     public string SystemPrompt { get; set; } = string.Empty;
     public string Created { get; set; } = DateTime.Now.ToString("o");
     public List<ClaudeChatEntry> Messages { get; set; } = new();
+    /// <summary>When set, messages are routed to the Claude Code bridge for this agent.</summary>
+    public string? AgentId { get; set; }
 }
 
 /// <summary>
@@ -36,6 +38,8 @@ public class ClaudeModelOption
 /// <summary>
 /// A named AI agent with its own system prompt, model, and description.
 /// The description is shown to the orchestrator so it knows when to invoke the agent.
+/// When IsClaudeCodeAgent is true, messages are routed through the local bridge
+/// to Claude Code (which has real tool access) rather than the Anthropic API directly.
 /// </summary>
 public class ClaudeAgent
 {
@@ -44,4 +48,6 @@ public class ClaudeAgent
     public string Description { get; set; } = string.Empty;   // used by orchestrator
     public string SystemPrompt { get; set; } = string.Empty;
     public string Model { get; set; } = "claude-sonnet-4-6";
+    /// <summary>If true, route messages to the local Claude Code bridge instead of the API.</summary>
+    public bool IsClaudeCodeAgent { get; set; } = false;
 }
