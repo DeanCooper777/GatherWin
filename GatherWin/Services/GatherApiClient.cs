@@ -995,7 +995,7 @@ public class GatherApiClient
         return body;
     }
 
-    public async Task<(bool Success, string? Reply, string? Error)> PostClawMessageStreamAsync(
+    public async Task<(bool Success, string? Reply, string? Error, bool WasDropped)> PostClawMessageStreamAsync(
         string clawId, string message, string pbToken,
         Action<string> onChunk, CancellationToken ct,
         Action<string>? onFinalReply = null)
@@ -1014,7 +1014,7 @@ public class GatherApiClient
         {
             var errBody = await response.Content.ReadAsStringAsync(ct);
             AppLogger.Log("ClawStream", $"Error response: {errBody}");
-            return (false, null, ParseApiError(errBody, (int)response.StatusCode));
+            return (false, null, ParseApiError(errBody, (int)response.StatusCode), false);
         }
 
         using var stream = await response.Content.ReadAsStreamAsync(ct);
@@ -1079,7 +1079,7 @@ public class GatherApiClient
                         var errMsg = root.TryGetProperty("error", out var em) ? em.GetString()
                             : root.TryGetProperty("message", out var emm) ? emm.GetString() : data;
                         AppLogger.Log("ClawStream", $"[error] {errMsg}");
-                        return (false, null, $"Claw error: {errMsg}");
+                        return (false, null, $"Claw error: {errMsg}", false);
                     }
                     else
                     {
@@ -1112,15 +1112,14 @@ public class GatherApiClient
             var partial = reply.ToString();
             if (partial.Length > 0)
             {
-                // Return what we have with a note
                 onFinalReply?.Invoke(partial);
-                return (true, partial, null);
+                return (true, partial, null, true);
             }
-            return (false, null, "Stream dropped before the claw replied — it may still be processing. Try 'keep going' or 'continue'.");
+            return (false, null, "Stream dropped — claw may still be processing", true);
         }
 
         AppLogger.Log("ClawStream", $"Stream complete — chunks={textChunks} tools={toolCalls}/{toolResults} gotEnd={gotEnd} gotDone={gotDone} replyLen={reply.Length}");
-        return (true, reply.ToString(), null);
+        return (true, reply.ToString(), null, false);
     }
 
     // ── Claw Management ───────────────────────────────────────────

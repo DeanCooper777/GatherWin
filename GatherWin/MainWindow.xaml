@@ -3712,6 +3712,11 @@
                                                                                 <Setter Property="Background" Value="#E8F5E9"/>
                                                                                 <Setter Property="HorizontalAlignment" Value="Right"/>
                                                                             </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                                                                <Setter Property="Padding" Value="6,3"/>
+                                                                            </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
                                                                 </Border.Style>
@@ -3726,21 +3731,44 @@
                                                                                         <Setter Property="Text" Value="You"/>
                                                                                         <Setter Property="Foreground" Value="#27AE60"/>
                                                                                     </DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                    </DataTrigger>
                                                                                 </Style.Triggers>
                                                                             </Style>
                                                                         </TextBlock.Style>
                                                                     </TextBlock>
                                                                     <TextBox Text="{Binding Body, Mode=OneWay}"
-                                                                             FontSize="12" TextWrapping="Wrap"
-                                                                             Foreground="#2C3E50"
-                                                                             IsReadOnly="True"
-                                                                             BorderThickness="0"
-                                                                             Background="Transparent"
-                                                                             Padding="0"
-                                                                             SelectionBrush="#B39DDB"/>
+                                                                             IsReadOnly="True" BorderThickness="0"
+                                                                             Background="Transparent" Padding="0"
+                                                                             TextWrapping="Wrap" SelectionBrush="#B39DDB">
+                                                                        <TextBox.Style>
+                                                                            <Style TargetType="TextBox">
+                                                                                <Setter Property="FontSize" Value="12"/>
+                                                                                <Setter Property="Foreground" Value="#2C3E50"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                                                                                        <Setter Property="FontSize" Value="10"/>
+                                                                                        <Setter Property="FontStyle" Value="Italic"/>
+                                                                                        <Setter Property="Foreground" Value="#888"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBox.Style>
+                                                                    </TextBox>
                                                                     <TextBlock Text="{Binding Timestamp}"
                                                                                FontSize="9" Foreground="#999"
-                                                                               HorizontalAlignment="Right" Margin="0,2,0,0"/>
+                                                                               HorizontalAlignment="Right" Margin="0,2,0,0">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
                                                                 </StackPanel>
                                                             </Border>
                                                         </DataTemplate>

@@ -446,23 +446,27 @@ public partial class ClawsViewModel : ObservableObject
         el.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
 
     [RelayCommand]
-    private async Task SendClawMessageAsync(CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(ChatInput)) return;
-        if (SelectedClaw?.Id is null) { ChatError = "No claw selected"; return; }
-        if (string.IsNullOrWhiteSpace(PbToken)) { ChatError = "Session token required"; return; }
+    private Task SendClawMessageAsync(CancellationToken ct)
+        => SendMessageCoreAsync(ChatInput.Trim(), isAutoRetry: false, ct);
 
-        var msg = ChatInput.Trim();
-        ChatInput = string.Empty;
+    private const string AutoContinueMessage = "connection was dropped - please continue";
+
+    private async Task SendMessageCoreAsync(string msg, bool isAutoRetry, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(msg)) return;
+        if (SelectedClaw?.Id is null) return;
+        if (string.IsNullOrWhiteSpace(PbToken)) return;
+
+        if (!isAutoRetry) ChatInput = string.Empty;
         IsSendingChat = true;
         ChatError = null;
 
         Application.Current.Dispatcher.Invoke(() =>
             ChatMessages.Add(new ClawChatMessage { Role = "user", Body = msg }));
 
+        bool wasDropped = false;
         try
         {
-            // Add a placeholder for the streaming reply; capture its index
             int replyIdx = -1;
             Application.Current.Dispatcher.Invoke(() =>
             {
@@ -483,14 +487,13 @@ public partial class ClawsViewModel : ObservableObject
                     };
             });
 
-            var (ok, _, err) = await _api.PostClawMessageStreamAsync(
+            var (ok, _, err, dropped) = await _api.PostClawMessageStreamAsync(
                 SelectedClaw.Id, msg, PbToken.Trim(),
-                chunk =>
-                {
-                    replyText.Append(chunk);
-                    UpdateBubble(replyText.ToString());
-                }, ct,
+                chunk => { replyText.Append(chunk); UpdateBubble(replyText.ToString()); },
+                ct,
                 finalText => UpdateBubble(finalText));
+
+            wasDropped = dropped;
 
             if (!ok)
             {
@@ -499,23 +502,37 @@ public partial class ClawsViewModel : ObservableObject
                     if (replyIdx >= 0 && replyIdx < ChatMessages.Count)
                         ChatMessages.RemoveAt(replyIdx);
                 });
-                ChatError = err;
+                if (!dropped) ChatError = err;
             }
         }
-        catch (OperationCanceledException) { /* user cancelled */ }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
-            var isDropped = ex.Message.Contains("ResponseEnded") || ex is System.IO.IOException;
-            ChatError = isDropped
-                ? "Connection dropped — the claw may still be processing. Try sending 'continue' or 'keep going'."
-                : ex.Message;
-            AppLogger.LogError("ClawChat: send failed", ex);
+            wasDropped = ex.Message.Contains("ResponseEnded") || ex is System.IO.IOException;
+            if (!wasDropped)
+            {
+                ChatError = ex.Message;
+                AppLogger.LogError("ClawChat: send failed", ex);
+            }
         }
         finally
         {
             IsSendingChat = false;
-            // Refresh logs so we can see what the claw was doing
             _ = RefreshLogsAsync(CancellationToken.None);
+        }
+
+        // Auto-continue on dropped connection — but only once (no infinite loop)
+        if (wasDropped && !isAutoRetry && SelectedClaw is not null)
+        {
+            AppLogger.Log("ClawChat", $"[Auto] Stream dropped — sending: \"{AutoContinueMessage}\"");
+            Application.Current.Dispatcher.Invoke(() =>
+                ChatMessages.Add(new ClawChatMessage
+                {
+                    Role = "system",
+                    Body = $"[Auto] Stream dropped — sending: \"{AutoContinueMessage}\""
+                }));
+            await Task.Delay(1500, ct);
+            await SendMessageCoreAsync(AutoContinueMessage, isAutoRetry: true, ct);
         }
     }
 
