@@ -245,7 +245,12 @@ public partial class ClaudeViewModel : ObservableObject
     [RelayCommand]
     private void DeleteAgent()
     {
-        if (SelectedAgent is null) return;
+        // Also purge any nulls that sneak in from previous bug
+        for (int i = Agents.Count - 1; i >= 0; i--)
+            if (Agents[i] is null || string.IsNullOrEmpty(Agents[i].Name))
+                Agents.RemoveAt(i);
+
+        if (SelectedAgent is null) { SaveAgents(); return; }
         var idx = Agents.IndexOf(SelectedAgent);
         Agents.Remove(SelectedAgent);
         SelectedAgent = Agents.Count > 0 ? Agents[Math.Max(0, idx - 1)] : null;
@@ -469,10 +474,11 @@ public partial class ClaudeViewModel : ObservableObject
         sb.AppendLine("3. Use the invoke_agent tool to delegate tasks — pass all necessary context in the task");
         sb.AppendLine("4. Synthesize the agents' results and give the user a clear, complete final answer");
         sb.AppendLine();
-        if (Agents.Count > 0)
+        var validAgents = Agents.Where(a => a is not null && !string.IsNullOrEmpty(a.Name)).ToList();
+        if (validAgents.Count > 0)
         {
             sb.AppendLine("Your available agents:");
-            foreach (var a in Agents)
+            foreach (var a in validAgents)
                 sb.AppendLine($"- **{a.Name}**: {a.Description}");
         }
         else
@@ -571,8 +577,11 @@ public partial class ClaudeViewModel : ObservableObject
             var list = JsonSerializer.Deserialize<List<ClaudeAgent>>(
                 File.ReadAllText(AgentsPath));
             if (list is null) return;
-            foreach (var a in list) Agents.Add(a);
+            foreach (var a in list.Where(a => a is not null && !string.IsNullOrEmpty(a.Name)))
+                Agents.Add(a);
             if (Agents.Count > 0) SelectedAgent = Agents[0];
+            // Re-save immediately to purge any nulls from the file
+            SaveAgents();
         }
         catch (Exception ex) { AppLogger.LogError("ClaudeVM: load agents failed", ex); }
     }
