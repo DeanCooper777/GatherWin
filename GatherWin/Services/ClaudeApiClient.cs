@@ -221,6 +221,213 @@ public class ClaudeApiClient : IDisposable
         }
     }
 
+    // ── Agentic loop (orchestrator + sub-agents) ──────────────────
+
+    /// <summary>
+    /// Run a multi-turn agentic loop. The orchestrator streams text and may call
+    /// tools; each tool call is executed by <paramref name="executeTool"/> and the
+    /// result fed back in. Continues until stop_reason is "end_turn" or the
+    /// safety iteration cap is reached.
+    /// </summary>
+    public async Task<(bool Success, string? FinalText, string? Error)> RunAgentLoopAsync(
+        IReadOnlyList<ClaudeChatEntry> conversationHistory,
+        string systemPrompt,
+        string model,
+        object[] toolDefinitions,
+        Action<string> onTextChunk,
+        Func<string, string, CancellationToken, Task<string>> executeTool, // (agentName, task) → result
+        Action<string, string> onToolInvoke,   // (agentName, task) for UI notification
+        CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return (false, null, "Claude API key not configured.");
+
+        // Build mutable message list from conversation history
+        var apiMessages = new List<object>(
+            conversationHistory.Select(e => (object)new { role = e.Role, content = e.Content }));
+
+        const int maxIterations = 10;
+        var finalText = new StringBuilder();
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            var (roundText, toolUses, stopReason, error) =
+                await StreamOneRoundAsync(apiMessages, systemPrompt, model, toolDefinitions, onTextChunk, ct);
+
+            if (error is not null)
+                return (false, null, error);
+
+            finalText.Clear();
+            finalText.Append(roundText);
+
+            if (stopReason == "end_turn" || toolUses.Count == 0)
+                break;
+
+            // Add the assistant's turn (text + tool_use blocks) to history
+            var assistantContent = new List<object>();
+            if (roundText.Length > 0)
+                assistantContent.Add(new { type = "text", text = roundText });
+            foreach (var (id, name, input) in toolUses)
+                assistantContent.Add(new { type = "tool_use", id, name, input });
+            apiMessages.Add(new { role = "assistant", content = assistantContent.ToArray() });
+
+            // Execute each tool and collect results
+            var toolResultContent = new List<object>();
+            foreach (var (id, name, input) in toolUses)
+            {
+                var agentName = input.TryGetProperty("agent_name", out var an) ? an.GetString() ?? name : name;
+                var task      = input.TryGetProperty("task",        out var tk) ? tk.GetString() ?? "" : "";
+                onToolInvoke(agentName, task);
+                var result = await executeTool(agentName, task, ct);
+                toolResultContent.Add(new { type = "tool_result", tool_use_id = id, content = result });
+            }
+            apiMessages.Add(new { role = "user", content = toolResultContent.ToArray() });
+        }
+
+        return (true, finalText.ToString(), null);
+    }
+
+    private record ToolCallAccumulator(string Id, string Name, StringBuilder InputJson);
+
+    private async Task<(string Text, List<(string Id, string Name, System.Text.Json.JsonElement Input)> ToolUses, string StopReason, string? Error)>
+        StreamOneRoundAsync(
+            List<object> messages,
+            string? systemPrompt,
+            string model,
+            object[] tools,
+            Action<string> onTextChunk,
+            CancellationToken ct)
+    {
+        var payloadDict = new Dictionary<string, object>
+        {
+            ["model"]      = model,
+            ["max_tokens"] = 8192,
+            ["stream"]     = true,
+            ["messages"]   = messages
+        };
+        if (!string.IsNullOrWhiteSpace(systemPrompt))
+            payloadDict["system"] = systemPrompt;
+        if (tools.Length > 0)
+            payloadDict["tools"] = tools;
+
+        var json = JsonSerializer.Serialize(payloadDict);
+        using var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl);
+        request.Headers.Add("x-api-key", _apiKey);
+        request.Headers.Add("anthropic-version", AnthropicVersion);
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errBody = await response.Content.ReadAsStringAsync(ct);
+            string errMsg;
+            try
+            {
+                using var errDoc = JsonDocument.Parse(errBody);
+                errMsg = errDoc.RootElement.TryGetProperty("error", out var e) &&
+                         e.TryGetProperty("message", out var m)
+                    ? m.GetString() ?? errBody
+                    : errBody;
+            }
+            catch { errMsg = errBody; }
+            return ("", new(), "end_turn", $"API error {(int)response.StatusCode}: {errMsg}");
+        }
+
+        using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var reader = new System.IO.StreamReader(stream);
+
+        var textSb = new StringBuilder();
+        var toolAccumulators = new Dictionary<int, ToolCallAccumulator>();
+        int currentBlockIndex = -1;
+        string stopReason = "end_turn";
+        string? currentEventType = null;
+
+        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (line is null) break;
+
+            if (line.StartsWith("event:"))
+            {
+                currentEventType = line["event:".Length..].Trim();
+                continue;
+            }
+            if (!line.StartsWith("data:")) continue;
+            var data = line["data:".Length..].Trim();
+            if (string.IsNullOrEmpty(data)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(data);
+                var root = doc.RootElement;
+                var eventType = root.TryGetProperty("type", out var typeEl)
+                    ? typeEl.GetString() : currentEventType;
+
+                switch (eventType)
+                {
+                    case "content_block_start":
+                        currentBlockIndex = root.GetProperty("index").GetInt32();
+                        var cb = root.GetProperty("content_block");
+                        if (cb.GetProperty("type").GetString() == "tool_use")
+                        {
+                            var toolId   = cb.TryGetProperty("id",   out var idEl)   ? idEl.GetString()   ?? "" : "";
+                            var toolName = cb.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "";
+                            toolAccumulators[currentBlockIndex] = new ToolCallAccumulator(toolId, toolName, new StringBuilder());
+                        }
+                        break;
+
+                    case "content_block_delta":
+                        var delta = root.GetProperty("delta");
+                        var deltaType = delta.GetProperty("type").GetString();
+                        if (deltaType == "text_delta" &&
+                            delta.TryGetProperty("text", out var textEl))
+                        {
+                            var chunk = textEl.GetString() ?? "";
+                            textSb.Append(chunk);
+                            if (chunk.Length > 0) onTextChunk(chunk);
+                        }
+                        else if (deltaType == "input_json_delta" &&
+                                 toolAccumulators.TryGetValue(currentBlockIndex, out var acc) &&
+                                 delta.TryGetProperty("partial_json", out var pjEl))
+                        {
+                            acc.InputJson.Append(pjEl.GetString() ?? "");
+                        }
+                        break;
+
+                    case "message_delta":
+                        if (root.TryGetProperty("delta", out var msgDelta) &&
+                            msgDelta.TryGetProperty("stop_reason", out var sr))
+                            stopReason = sr.GetString() ?? "end_turn";
+                        break;
+
+                    case "message_stop":
+                        goto loopDone;
+                }
+            }
+            catch { /* unrecognised event */ }
+        }
+        loopDone:
+
+        // Parse accumulated tool_use inputs
+        var toolUses = new List<(string, string, System.Text.Json.JsonElement)>();
+        foreach (var acc in toolAccumulators.Values)
+        {
+            try
+            {
+                using var inputDoc = JsonDocument.Parse(
+                    acc.InputJson.Length > 0 ? acc.InputJson.ToString() : "{}");
+                toolUses.Add((acc.Id, acc.Name, inputDoc.RootElement.Clone()));
+            }
+            catch
+            {
+                toolUses.Add((acc.Id, acc.Name, JsonDocument.Parse("{}").RootElement.Clone()));
+            }
+        }
+
+        AppLogger.Log("ClaudeAgent", $"Round complete — text={textSb.Length}ch tools={toolUses.Count} stopReason={stopReason}");
+        return (textSb.ToString(), toolUses, stopReason, null);
+    }
+
     public void Dispose()
     {
         _http.Dispose();

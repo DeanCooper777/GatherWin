@@ -32,3 +32,16 @@ public class ClaudeModelOption
     public ClaudeModelOption(string id, string label) { Id = id; Label = label; }
     public override string ToString() => Label;
 }
+
+/// <summary>
+/// A named AI agent with its own system prompt, model, and description.
+/// The description is shown to the orchestrator so it knows when to invoke the agent.
+/// </summary>
+public class ClaudeAgent
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string Name { get; set; } = "New Agent";
+    public string Description { get; set; } = string.Empty;   // used by orchestrator
+    public string SystemPrompt { get; set; } = string.Empty;
+    public string Model { get; set; } = "claude-sonnet-4-6";
+}
