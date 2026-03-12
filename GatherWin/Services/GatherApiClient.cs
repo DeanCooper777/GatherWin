@@ -937,6 +937,7 @@ public class GatherApiClient
         var response = await _http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
+        AppLogger.Log("ClawList", $"Raw JSON: {body}");
         return JsonSerializer.Deserialize<ClawsListResponse>(body, _jsonOpts);
     }
 
@@ -947,6 +948,7 @@ public class GatherApiClient
         var response = await _http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode) return null;
         var body = await response.Content.ReadAsStringAsync(ct);
+        AppLogger.Log("ClawDetail", $"Raw JSON: {body}");
         return JsonSerializer.Deserialize<ClawItem>(body, _jsonOpts);
     }
 
