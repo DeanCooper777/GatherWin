@@ -29,6 +29,7 @@
         <converters:CharCountConverter x:Key="CharCount"/>
         <converters:CharCountBrushConverter x:Key="CharCountBrush"/>
         <converters:LogEntryTypeToBrushConverter x:Key="LogEntryBrush"/>
+        <converters:MarkdownFlowDocConverter x:Key="MarkdownConverter"/>
 
         <!-- What's New card template -->
         <DataTemplate x:Key="WhatsNewCardTemplate" DataType="{x:Type vm:WhatsNewEntry}">
@@ -4587,10 +4588,13 @@
                                                                 </TextBox.Style>
                                                             </TextBox>
                                                             <!-- Markdown renderer for assistant messages -->
-                                                            <mdwpf:MarkdownViewer
-                                                                Markdown="{Binding Body}">
-                                                                <mdwpf:MarkdownViewer.Style>
-                                                                    <Style TargetType="mdwpf:MarkdownViewer">
+                                                            <FlowDocumentScrollViewer
+                                                                Document="{Binding Body, Converter={StaticResource MarkdownConverter}}"
+                                                                HorizontalScrollBarVisibility="Disabled"
+                                                                VerticalScrollBarVisibility="Disabled"
+                                                                MinHeight="0" Padding="0">
+                                                                <FlowDocumentScrollViewer.Style>
+                                                                    <Style TargetType="FlowDocumentScrollViewer">
                                                                         <Setter Property="Visibility" Value="Collapsed"/>
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding IsAssistant}" Value="True">
@@ -4598,8 +4602,8 @@
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
-                                                                </mdwpf:MarkdownViewer.Style>
-                                                            </mdwpf:MarkdownViewer>
+                                                                </FlowDocumentScrollViewer.Style>
+                                                            </FlowDocumentScrollViewer>
                                                             <TextBlock Text="{Binding Timestamp}"
                                                                        FontSize="9" Foreground="#999"
                                                                        HorizontalAlignment="Right" Margin="0,2,0,0">

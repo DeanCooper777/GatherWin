@@ -439,7 +439,9 @@ public partial class ClaudeViewModel : ObservableObject
         try
         {
             var response = await _bridge.SendAndWaitAsync(
-                agent.Id, agent.Name, agent.SystemPrompt, msg, history, ct);
+                agent.Id, agent.Name, agent.SystemPrompt, msg, history,
+                status => UpdateBubble(replyIdx, $"⏳ {status}"),
+                ct);
 
             var entry = new ClaudeChatEntry { Role = "assistant", Content = response };
             SelectedConversation.Messages.Add(entry);
@@ -453,7 +455,7 @@ public partial class ClaudeViewModel : ObservableObject
             // Bridge timeout (5 min) — not user cancel
             RemoveBubble(replyIdx);
             RemoveLastUserMessage(msg);
-            ChatError = "Timed out waiting for Claude Code (5 min). Is cc_agent.py running?";
+            ChatError = "Timed out waiting for Claude Code (20 min). Is cc_agent.py running?";
             BridgeStatus = $"Bridge: :7432 (timed out)";
         }
         catch (OperationCanceledException) { RemoveBubble(replyIdx); }
